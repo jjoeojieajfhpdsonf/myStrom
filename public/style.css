@@ -35,7 +35,16 @@ a { color: var(--acc); }
 .tile .lock { position: absolute; top: 8px; left: 10px; font-size: 13px; }
 .tile .more { position: absolute; right: 0; bottom: 0; width: 44px; height: 44px; display: grid; place-items: center; font-size: 22px; opacity: .85; }
 .tile .hit { position: absolute; inset: 0; }
-.tile.dev { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.tile.dev { touch-action: pan-y; user-select: none; -webkit-user-select: none; background: #000; }
+/* Kachel als Seite, die beim Wischen hinausgleitet; dahinter die nächste Seite AN (grün) oder AUS (rot) */
+.tile.dev .face { position: absolute; inset: 0; display: grid; justify-items: center; align-content: center; gap: 8px; background: var(--tile); transition: background .25s; will-change: transform; }
+.tile.dev.on .face { background: var(--acc); color: #fff; }
+.tile.dev .hit { z-index: 2; }
+.tile.dev .next { position: absolute; inset: 0; z-index: 1; display: grid; justify-items: center; align-content: center; gap: 6px; color: #fff; will-change: transform; pointer-events: none; }
+.tile.dev .next b { font-size: 26px; font-weight: 600; letter-spacing: .08em; }
+.tile.dev .next span { font-size: 13px; opacity: .85; padding: 0 10px; }
+.tile.dev .next.to-on { background: var(--acc); }
+.tile.dev .next.to-off { background: #d7352b; }
 .tile.feat.act::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--acc); }
 .tile.feat.act .sub { color: #b9e68f; }
 .tile.add { color: var(--mut); }
@@ -115,7 +124,12 @@ a { color: var(--acc); }
 
 /* sofortige Rückmeldung beim Antippen */
 .tile:active:not(.dev) { background: #2e2e2e; }
-.tile.dev:active { filter: brightness(1.12); }
+.tile.dev:active .face { filter: brightness(1.12); }
 .row:is(button, label):active { background: #242424; }
 .chip:active, .btn:active, .hd .ic:active { opacity: .6; }
-main { will-change: transform; }
+main { position: relative; z-index: 2; background: var(--bg); min-height: 100vh; touch-action: pan-y; }
+/* Kopie der vorherigen Seite während des Seitenwechsels */
+.ghost { position: fixed; inset: 0; overflow: hidden; pointer-events: none; background: var(--bg);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+.ghost > main { min-height: 100%; }
+html.paging, html.paging body { overflow-x: hidden; }

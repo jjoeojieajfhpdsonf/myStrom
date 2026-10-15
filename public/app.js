@@ -106,7 +106,7 @@ async function switchDev(mac, on, quiet = false) {
   d.relay = on; d.status = on ? 'Eingeschaltet' : 'Aus · von Hand'; if (!on) d.w = 0; render();
   try {
     Object.assign(d, await api(`api/devices/${mac}/relay`, { method: 'POST', body: JSON.stringify({ on }) })); render();
-    if (!quiet) toast(`${d.name} ${on ? 'an' : 'aus'}`, false, () => switchDev(mac, !on, true));
+    if (!quiet) toast(`${d.name} ${on ? 'an' : 'aus'}`, false, () => { const b = document.querySelector(`[data-swipe="${mac}"]`); if (b) tapFlipQuiet(b, dev(mac)); else switchDev(mac, !on, true); });
     return true;
   } catch (e) { Object.assign(d, before); render(); toast(e.message, true); return false; }
 }
@@ -141,15 +141,46 @@ addEventListener('popstate', () => {
   if (i >= 0) stack.length = i + 1; else stack.push(h);
   show();
 });
-// Seitenwechsel: neu aufbauen, Scrollposition merken, kurze Schiebe-Animation wie unter iOS
+// Seitenwechsel wie unter iOS: die neue Seite schiebt sich von rechts über die alte, die alte weicht etwas nach
+// links aus und wird dunkler; zurück genau umgekehrt. Dafür bleibt eine Kopie der alten Seite kurz stehen.
+const EASE = 'cubic-bezier(.32,.72,0,1)', DUR = 380;
+let ghost = null;
 function show() {
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, oldScroll = scrollY;
+  ghost?.remove(); ghost = null;
+  if (dir && !reduced && S) {
+    ghost = document.createElement('div');
+    ghost.className = 'ghost';
+    const inner = app.cloneNode(true); inner.removeAttribute('id'); inner.removeAttribute('aria-live');
+    ghost.append(inner);
+    document.body.append(ghost);
+    ghost.scrollTop = oldScroll; // Kopie zeigt genau den Ausschnitt, der eben zu sehen war
+  }
   render(true);
   scrollTo(0, dir < 0 ? scrolls[cur()] || 0 : 0);
-  if (dir && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    app.animate([{ transform: `translateX(${dir * 16}px)`, opacity: 0.5 }, { transform: 'none', opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  if (ghost) {
+    const g = ghost, w = innerWidth, fwd = dir > 0;
+    document.documentElement.classList.add('paging');
+    g.style.zIndex = fwd ? '1' : '30';
+    const top = fwd ? app : g; // die Seite, die oben liegt und ganz hinein- bzw. hinausfährt
+    top.style.boxShadow = '-12px 0 32px rgb(0 0 0 / .55)';
+    const under = fwd ? g : app;
+    const a1 = top.animate(fwd ? [{ transform: `translateX(${w}px)` }, { transform: 'none' }] : [{ transform: 'none' }, { transform: `translateX(${w}px)` }], { duration: DUR, easing: EASE });
+    under.animate(fwd ? [{ transform: 'none', filter: 'brightness(1)' }, { transform: `translateX(${-w * 0.3}px)`, filter: 'brightness(.55)' }]
+      : [{ transform: `translateX(${-w * 0.3}px)`, filter: 'brightness(.55)' }, { transform: 'none', filter: 'brightness(1)' }], { duration: DUR, easing: EASE });
+    a1.finished.catch(() => {}).then(() => { if (ghost === g) { g.remove(); ghost = null; } top.style.boxShadow = ''; document.documentElement.classList.remove('paging'); });
   }
   dir = 0;
 }
+// vom linken Rand nach rechts wischen = zurück (auf dem iPhone-Homescreen gibt es sonst keine Zurück-Geste)
+let edge = null;
+addEventListener('pointerdown', (e) => { if (e.clientX < 24 && cur() !== 'home' && e.pointerType !== 'mouse') edge = { x: e.clientX, y: e.clientY, id: e.pointerId }; }, true);
+addEventListener('pointermove', (e) => {
+  if (!edge || e.pointerId !== edge.id) return;
+  if (Math.abs(e.clientY - edge.y) > 40) { edge = null; return; }
+  if (e.clientX - edge.x > 70) { edge = null; $('[data-back]')?.click(); }
+}, true);
+addEventListener('pointerup', () => { edge = null; }, true);
 const HD = (title, backTo, right = '<span></span>', sub = '') => `<header class="hd"><button type="button" class="ic" data-back="${backTo}" aria-label="Zurück">‹</button><b>${title}${sub ? `<small>${sub}</small>` : ''}</b>${right}</header>`;
 
 // ---------- Bausteine ----------
@@ -174,11 +205,11 @@ function homeHTML() {
   return `<header class="hd"><span></span><b>myStrom</b><button type="button" class="ic" data-go="more" aria-label="Mehr">${I.menu}</button></header>
     <div class="grid">
       ${S.devices.map((d) => `<div class="tile dev ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-mac="${d.mac}">
-        <button type="button" class="hit" data-swipe="${d.mac}" aria-label="${esc(d.name)}, ${d.relay ? 'an' : 'aus'}. Öffnen; Wischen oder Leertaste schaltet"></button>
-        ${d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : ''}${d.cfg.lock ? '<span class="lock" title="Tastensperre">🔒</span>' : ''}
+        <div class="face">${d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : ''}${d.cfg.lock ? '<span class="lock" title="Tastensperre">🔒</span>' : ''}
         <span class="ico">${I.plug}</span><span class="lb">${d.relay ? `${pw(d.w)}<br>` : ''}${esc(d.name)}</span>
         ${subOf(d) ? `<span class="sub">${esc(subOf(d))}</span>` : ''}
-        <span class="more" aria-hidden="true">›</span></div>`).join('')}
+        <span class="more" aria-hidden="true">›</span></div>
+        <button type="button" class="hit" data-swipe="${d.mac}" aria-label="${esc(d.name)}, ${d.relay ? 'an' : 'aus'}. Öffnen; Wischen oder Leertaste schaltet"></button></div>`).join('')}
       ${tile('energy', I.bolt, `${pw(total)}<br>Verbrauch`)}
       ${tile('scenes', I.scenes, 'Szenen')}
       ${tile('guard', I.guard, 'Home Guard', guardOn ? `${guardOn} in Ferien` : '')}
@@ -192,8 +223,9 @@ function homeHTML() {
 function deviceHTML(d) {
   return HD(esc(d.name), 'home', `<button type="button" class="ic" data-go="dev/${d.mac}/settings" aria-label="Einstellungen">${I.gear}</button>`, esc(d.cfg.room))
     + `<div class="grid">
-      <div class="tile dev ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}"><button type="button" class="hit" data-swipe="${d.mac}" data-inpage="1" aria-label="${esc(d.name)} ${d.relay ? 'ausschalten' : 'einschalten'}"></button>
-        <span class="ico">${I.toggle(d.relay)}</span><span class="lb">${d.relay ? `${pw(d.w)} · An` : 'Aus'}</span>${subOf(d) ? `<span class="sub">${esc(subOf(d))}</span>` : ''}</div>
+      <div class="tile dev ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}">
+        <div class="face"><span class="ico">${I.toggle(d.relay)}</span><span class="lb">${d.relay ? `${pw(d.w)} · An` : 'Aus'}</span>${subOf(d) ? `<span class="sub">${esc(subOf(d))}</span>` : ''}</div>
+        <button type="button" class="hit" data-swipe="${d.mac}" data-inpage="1" aria-label="${esc(d.name)} ${d.relay ? 'ausschalten' : 'einschalten'}"></button></div>
       ${FEAT.map(([k, ic, l]) => { const [on, txt] = featInfo(d, k); return `<button type="button" class="tile feat ${on ? 'act' : ''}" data-go="dev/${d.mac}/${k}"><span class="ico">${I[ic]}</span><span class="lb">${l}</span><span class="sub">${on || k === 'eval' ? esc(txt) : 'aus'}</span></button>`; }).join('')}
     </div>`;
 }
@@ -425,7 +457,7 @@ function morph(a, b) {
     else if (n.nodeType === 1) morph(o, n);
     else if (o.nodeValue !== n.nodeValue) o.nodeValue = n.nodeValue;
   });
-  for (let i = bc.length; i < ac.length; i++) ac[i].remove();
+  for (let i = bc.length; i < ac.length; i++) if (!ac[i].dataset?.transient) ac[i].remove();
 }
 function render(fresh = false) {
   if (!S || swipe) return;
@@ -439,34 +471,93 @@ function render(fresh = false) {
   if (r0 === 'alarms' && !events) api('api/events?n=40').then((e) => { events = e; const el = $('[data-events]'); if (el) el.innerHTML = eventsHTML(); });
 }
 
-// ---------- Wischen auf den Kacheln (wie in der myStrom-App) ----------
+// ---------- Wischen auf den Kacheln: wie zur nächsten Seite blättern ----------
+// Die aktuelle Kachel schiebt sich mit dem Finger hinaus, von der anderen Seite kommt die nächste:
+// grün „AN“ oder rot „AUS“. Über die halbe Breite rastet sie ein und schaltet, sonst federt sie zurück.
+const POWER = '<svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v9M6.3 6.8a8 8 0 1 0 11.4 0"/></svg>';
 let swiped = 0;
+function nextPanel(tile, on, name) {
+  let n = tile.querySelector('.next');
+  if (!n) { n = document.createElement('div'); n.className = 'next'; n.dataset.transient = '1'; tile.append(n); }
+  n.classList.toggle('to-on', on); n.classList.toggle('to-off', !on);
+  n.innerHTML = `${POWER}<b>${on ? 'AN' : 'AUS'}</b><span>${esc(name)}</span>`;
+  return n;
+}
+// Seite und Gegenstück an die Fingerposition setzen (x in px, positiv = nach rechts)
+function place(tile, x, animate) {
+  const face = tile.querySelector('.face'), n = tile.querySelector('.next'), w = tile.offsetWidth, t = animate ? 'transform .22s cubic-bezier(.2,.8,.2,1)' : 'none';
+  face.style.transition = t; face.style.transform = x ? `translateX(${x}px)` : '';
+  if (n) { n.style.transition = t; n.style.transform = `translateX(${x - Math.sign(x || 1) * w}px)`; }
+}
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+// fertig blättern, die neue Seite kurz zeigen, dann schalten und in die normale Kachel übergehen
+async function flip(tile, d, sign) {
+  const w = tile.offsetWidth;
+  nextPanel(tile, !d.relay, d.name);
+  if (!tile.querySelector('.next').style.transform) place(tile, 0.001 * sign, false); // Start ausserhalb, falls per Tippen
+  await wait(20);
+  place(tile, sign * w, true);
+  await wait(420);
+  const n = tile.querySelector('.next'), face = tile.querySelector('.face');
+  face.style.transition = 'none'; face.style.transform = '';
+  swipe = null;
+  const ok = await switchDev(d.mac, !d.relay);
+  if (n) { n.style.transition = 'opacity .25s'; n.style.opacity = ok ? '0' : '0'; await wait(260); n.remove(); }
+  if (!ok) shake(tile);
+}
 app.addEventListener('pointerdown', (e) => {
-  const b = e.target.closest('[data-swipe]'); if (!b) return;
-  swipe = { b, tile: b.closest('.tile'), x: e.clientX, y: e.clientY, dx: 0, id: e.pointerId };
+  const b = e.target.closest('[data-swipe]'); if (!b || swipe) return;
+  swipe = { b, tile: b.closest('.tile'), x: e.clientX, y: e.clientY, dx: 0, id: e.pointerId, live: false };
 });
 // Sicherheitsnetz: bleibt ein Wischen hängen (z. B. Finger verlässt das Fenster), nach 3 s freigeben
-setInterval(() => { if (swipe && !document.querySelector(':active')) { swipe.tile.style.transform = ''; swipe = null; } }, 3000);
+setInterval(() => { if (swipe && !swipe.busy && !document.querySelector(':active')) { place(swipe.tile, 0, false); swipe.tile.querySelector('.next')?.remove(); swipe = null; } }, 3000);
 app.addEventListener('pointermove', (e) => {
-  if (!swipe || e.pointerId !== swipe.id) return;
-  swipe.dx = e.clientX - swipe.x;
-  if (Math.abs(e.clientY - swipe.y) > 24 && Math.abs(swipe.dx) < 16) { swipe.tile.style.transform = ''; swipe = null; return; } // senkrecht = scrollen
-  if (Math.abs(swipe.dx) > 8) { swipe.tile.style.transition = 'none'; swipe.tile.style.transform = `translateX(${Math.max(-40, Math.min(40, swipe.dx / 2))}px)`; }
+  if (!swipe || swipe.busy || e.pointerId !== swipe.id) return;
+  const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+  if (!swipe.live) {
+    if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { swipe = null; return; } // senkrecht = scrollen
+    if (Math.abs(dx) < 8) return;
+    swipe.live = true;
+    const d = dev(swipe.b.dataset.swipe);
+    swipe.blocked = d.cfg.lock || !d.online;
+    if (!swipe.blocked) nextPanel(swipe.tile, !d.relay, d.name);
+  }
+  // gesperrt oder offline: nur ein kurzes, gebremstes Mitgehen
+  swipe.dx = swipe.blocked ? Math.sign(dx) * Math.min(24, Math.abs(dx) / 4) : dx;
+  place(swipe.tile, swipe.dx, false);
 });
 const endSwipe = () => {
-  if (!swipe) return;
-  const s = swipe; swipe = null;
-  s.tile.style.transition = ''; s.tile.style.transform = '';
-  if (Math.abs(s.dx) >= 44) {
-    swiped = Date.now();
-    const d = dev(s.b.dataset.swipe);
-    if (d.cfg.lock) shake(s.tile); else { store.set('swiped', '1'); switchDev(d.mac, !d.relay); }
-  } else if (Math.abs(s.dx) > 8) render();
+  if (!swipe || swipe.busy) return;
+  const s = swipe;
+  if (!s.live) { swipe = null; return; } // war ein Tippen
+  swiped = Date.now();
+  const d = dev(s.b.dataset.swipe), w = s.tile.offsetWidth;
+  if (s.blocked) { place(s.tile, 0, true); swipe = null; shake(s.tile); toast(d.cfg.lock ? `${d.name}: Tastensperre ist an` : `${d.name} ist nicht erreichbar`, !d.cfg.lock); return; }
+  if (Math.abs(s.dx) >= w * 0.4) { s.busy = true; store.set('swiped', '1'); flip(s.tile, d, Math.sign(s.dx)); }
+  else { s.busy = true; place(s.tile, 0, true); setTimeout(() => { s.tile.querySelector('.next')?.remove(); swipe = null; render(); }, 230); }
 };
 app.addEventListener('pointerup', endSwipe);
 app.addEventListener('pointercancel', endSwipe);
 addEventListener('pointerup', endSwipe); // auch ausserhalb der App losgelassen
 
+async function tapFlipQuiet(el, d) {
+  const tile = el.closest('.tile');
+  if (swipe) return switchDev(d.mac, !d.relay, true);
+  swipe = { b: el, tile, busy: true, live: true, dx: 0 };
+  nextPanel(tile, !d.relay, d.name); place(tile, 0.001 * (d.relay ? -1 : 1), false); await wait(20);
+  place(tile, (d.relay ? -1 : 1) * tile.offsetWidth, true); await wait(420);
+  const n = tile.querySelector('.next'), face = tile.querySelector('.face');
+  face.style.transition = 'none'; face.style.transform = ''; swipe = null;
+  await switchDev(d.mac, !d.relay, true);
+  if (n) { n.style.transition = 'opacity .25s'; n.style.opacity = '0'; await wait(260); n.remove(); }
+}
+function tapFlip(el, d) {
+  const tile = el.closest('.tile');
+  if (d.cfg.lock || !d.online) { shake(tile); toast(d.cfg.lock ? `${d.name}: Tastensperre ist an` : `${d.name} ist nicht erreichbar`, !d.cfg.lock); return; }
+  if (swipe) return;
+  swipe = { b: el, tile, busy: true, live: true, dx: 0 };
+  flip(tile, d, d.relay ? -1 : 1); // aus: nach links weg, an: nach rechts
+}
 // ---------- Klicks ----------
 app.addEventListener('click', async (e) => {
   const at = (s) => e.target.closest(s), [r0, r1] = route();
@@ -475,7 +566,7 @@ app.addEventListener('click', async (e) => {
     if (Date.now() - swiped < 450) return;
     const d = dev(el.dataset.swipe);
     // Startseite: Tippen öffnet das Gerät. Geräteseite: die grosse Schalter-Kachel schaltet beim Tippen.
-    if (el.dataset.inpage) { if (d.cfg.lock) shake(el.closest('.tile')); else switchDev(d.mac, !d.relay); }
+    if (el.dataset.inpage) tapFlip(el, d);
     else go(`dev/${d.mac}`);
   } else if ((el = at('[data-back]'))) back(el.dataset.back);
   else if ((el = at('[data-go]'))) go(el.dataset.go);
@@ -530,7 +621,7 @@ app.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.matches('input')) e.target.blur();
   // Tastatur: Leertaste schaltet die Steckdose, Enter öffnet sie (wie Tippen)
   const sw = e.target.closest?.('[data-swipe]');
-  if (sw && e.key === ' ' && !sw.dataset.inpage) { e.preventDefault(); const d = dev(sw.dataset.swipe); if (d.cfg.lock) shake(sw.closest('.tile')); else switchDev(d.mac, !d.relay); }
+  if (sw && e.key === ' ' && !sw.dataset.inpage) { e.preventDefault(); tapFlip(sw, dev(sw.dataset.swipe)); }
 });
 
 // ---------- Push ----------

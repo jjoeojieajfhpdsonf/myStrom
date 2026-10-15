@@ -186,6 +186,7 @@ const EASE = 'cubic-bezier(.32,.72,0,1)', DUR = 380;
 let ghost = null;
 function show() {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, oldScroll = scrollY;
+  for (const a of app.getAnimations()) a.finish(); // ein laufender Wechsel wird sofort fertig
   ghost?.remove(); ghost = null;
   if (dir && !reduced && S) {
     ghost = document.createElement('div');
@@ -205,9 +206,12 @@ function show() {
     top.style.boxShadow = '-12px 0 32px rgb(0 0 0 / .55)';
     const under = fwd ? g : app;
     const a1 = top.animate(fwd ? [{ transform: `translateX(${w}px)` }, { transform: 'none' }] : [{ transform: 'none' }, { transform: `translateX(${w}px)` }], { duration: DUR, easing: EASE });
-    under.animate(fwd ? [{ transform: 'none', filter: 'brightness(1)' }, { transform: `translateX(${-w * 0.3}px)`, filter: 'brightness(.55)' }]
+    const a2 = under.animate(fwd ? [{ transform: 'none', filter: 'brightness(1)' }, { transform: `translateX(${-w * 0.3}px)`, filter: 'brightness(.55)' }]
       : [{ transform: `translateX(${-w * 0.3}px)`, filter: 'brightness(.55)' }, { transform: 'none', filter: 'brightness(1)' }], { duration: DUR, easing: EASE });
     a1.finished.catch(() => {}).then(() => { if (ghost === g) { g.remove(); ghost = null; } top.style.boxShadow = ''; document.documentElement.classList.remove('paging'); });
+    // Sicherheitsnetz: pausiert der Browser die Animation (App im Hintergrund, verdeckter Tab), steht die Seite trotzdem
+    // spätestens nach kurzer Zeit richtig; sonst bliebe sie verschoben und jedes Tippen ginge daneben
+    setTimeout(() => { for (const a of [a1, a2]) if (a.playState !== 'finished') a.finish(); }, DUR + 150);
   }
   dir = 0;
 }
@@ -605,6 +609,24 @@ function tapFlip(el, d) {
   haptic();
   flip(tile, d, d.relay ? -1 : 1); // aus: nach links weg, an: nach rechts
 }
+// Auswahl als Blatt von unten (wie ein iOS-Menü): Häkchen beim aktuellen Wert, Tippen wählt und schliesst
+function pickSheet(title, options, current, onPick) {
+  document.querySelector('.pick')?.remove();
+  const el = document.createElement('div');
+  el.className = 'pick';
+  el.innerHTML = `<div class="pick-bg" data-close></div><div class="pick-sheet" role="dialog" aria-label="${esc(title)}"><p class="pick-t">${esc(title)}</p>
+    <div class="ls">${options.map(([v, l, sub]) => `<button type="button" class="row" data-v="${esc(v)}"><span class="tx"><b>${esc(l)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</span>${v === current ? '<span class="val" style="color:var(--acc);font-size:20px">✓</span>' : ''}</button>`).join('')}</div>
+    <button type="button" class="btn grey" data-close>Abbrechen</button></div>`;
+  const close = () => { el.classList.remove('open'); setTimeout(() => el.remove(), 260); };
+  el.addEventListener('click', (e) => {
+    const o = e.target.closest('[data-v]');
+    if (o) { haptic(); onPick(o.dataset.v); close(); } else if (e.target.closest('[data-close]')) close();
+  });
+  document.body.append(el);
+  requestAnimationFrame(() => el.classList.add('open'));
+  setTimeout(() => el.classList.add('open'), 50); // falls kein Bild gezeichnet wird
+  el.querySelector('[data-v]')?.focus({ preventScroll: true });
+}
 // ---------- Klicks ----------
 app.addEventListener('click', async (e) => {
   const at = (s) => e.target.closest(s), [r0, r1] = route();
@@ -628,7 +650,11 @@ app.addEventListener('click', async (e) => {
     const n = Number(el.dataset.day), days = dev(r1).cfg.schedule.days;
     saveCfg(r1, { schedule: { days: days.includes(n) ? days.filter((x) => x !== n) : [...days, n] } });
   } else if ((el = at('[data-dayshift]'))) { view.day = addDays(view.day, Number(el.dataset.dayshift)); if (view.day > S.today) view.day = S.today; render(); }
-  else if (at('[data-devsel]')) { const ids = ['all', ...S.devices.map((d) => d.mac)]; view.mac = ids[(ids.indexOf(view.mac) + 1) % ids.length]; render(); }
+  else if (at('[data-devsel]')) {
+    haptic();
+    pickSheet('Gerät', [['all', 'Alle Geräte', `${kwh(S.devices.reduce((a, d) => a + d.todayWh, 0))} kWh heute`], ...S.devices.map((d) => [d.mac, d.name, `${d.cfg.room ? `${d.cfg.room} · ` : ''}${kwh(d.todayWh)} kWh heute`])],
+      view.mac, (v) => { view.mac = v; render(); });
+  }
   else if ((el = at('[data-run]'))) {
     el.disabled = true; haptic();
     try { const r = await api(`api/scenes/${el.dataset.run}/run`, { method: 'POST' }); await load(); toast(r.ok ? 'Szene ausgeführt' : `Nicht erreicht: ${r.errors.join(', ')}`, !r.ok); } catch (x) { toast(x.message, true); }
@@ -694,4 +720,4 @@ if ('serviceWorker' in navigator) {
 }
 load();
 setInterval(() => { if (!document.hidden) load(); }, 5000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { events = null; load(); } });
+document.addEventListener('visibilitychange', () => { for (const a of document.getAnimations()) if (a.playState === 'running') a.finish(); if (!document.hidden) { events = null; load(); } });

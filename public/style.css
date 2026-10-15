@@ -111,9 +111,8 @@ a { color: var(--acc); }
 
 /* Meldung unten mit "Rückgängig" */
 #toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 18px); transform: translateX(-50%); z-index: 20; background: #2f2f2f; color: #fff; border-radius: 12px;
-  padding: 10px 10px 10px 16px; display: flex; gap: 14px; align-items: center; box-shadow: 0 8px 30px rgb(0 0 0 / .5); max-width: calc(100vw - 32px); font-size: 14px; }
+  padding: 10px 16px; box-shadow: 0 8px 30px rgb(0 0 0 / .5); max-width: calc(100vw - 32px); font-size: 14px; }
 #toast[hidden] { display: none; }
-#toast button { color: var(--acc); font-weight: 600; padding: 6px 8px; }
 #toast.err { background: #4a1f1b; }
 
 .ev { display: grid; grid-template-columns: 44px 1fr; gap: 10px; }

@@ -5,7 +5,7 @@ Eigene App für die myStrom WiFi Switches im Heimnetz, im Aussehen der myStrom-A
 ## Was sie kann
 
 - **Finden:** Die Steckdosen melden sich alle paar Sekunden im WLAN (UDP 7979). Die App nimmt sie von selbst auf und merkt sich eine neue IP. Wo eine Steckdose sich nicht meldet, trägst du die IP unter „Mehr“ ein.
-- **Schalten:** Eine Kachel nach links oder rechts wischen schaltet sie, wie in der myStrom-App. Antippen öffnet die Funktionen. Jedes Schalten lässt sich 5 Sekunden lang rückgängig machen.
+- **Schalten:** Eine Kachel nach links oder rechts wischen schaltet sie, wie in der myStrom-App. Antippen öffnet die Funktionen.
 - **Messen:** Alle 30 Sekunden Leistung, Energie (aus dem Zähler der Steckdose) und Temperatur. Der Verlauf wird unbegrenzt gespeichert und lässt sich als CSV exportieren.
 - **Regeln** (laufen auf dem Server, auch wenn das Handy aus ist):
 

@@ -88,17 +88,16 @@ async function saveCfg(mac, patch) {
 }
 const patchOf = (path, v) => path.split('.').reduceRight((acc, k) => ({ [k]: acc }), v);
 
-// ---------- Schalten mit "Rückgängig" ----------
+// ---------- Schalten ----------
 let toastT;
-function toast(text, err = false, undo = null) {
+function toast(text, err = false) {
   const t = $('#toast');
   t.className = err ? 'err' : '';
-  t.innerHTML = `<span>${esc(text)}</span>${undo ? '<button type="button" id="undo">Rückgängig</button>' : ''}`;
+  t.textContent = text;
   t.hidden = false;
-  if (undo) $('#undo').onclick = () => { t.hidden = true; undo(); };
-  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, undo ? 5000 : 3000);
+  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3000);
 }
-async function switchDev(mac, on, quiet = false) {
+async function switchDev(mac, on) {
   const d = dev(mac);
   if (d.cfg.lock) { toast(`${d.name}: Tastensperre ist an`); return false; }
   if (!d.online) { toast(`${d.name} ist nicht erreichbar`, true); return false; }
@@ -106,7 +105,6 @@ async function switchDev(mac, on, quiet = false) {
   d.relay = on; d.status = on ? 'Eingeschaltet' : 'Aus · von Hand'; if (!on) d.w = 0; render();
   try {
     Object.assign(d, await api(`api/devices/${mac}/relay`, { method: 'POST', body: JSON.stringify({ on }) })); render();
-    if (!quiet) toast(`${d.name} ${on ? 'an' : 'aus'}`, false, () => { const b = document.querySelector(`[data-swipe="${mac}"]`); if (b) tapFlipQuiet(b, dev(mac)); else switchDev(mac, !on, true); });
     return true;
   } catch (e) { Object.assign(d, before); render(); toast(e.message, true); return false; }
 }
@@ -540,17 +538,6 @@ app.addEventListener('pointerup', endSwipe);
 app.addEventListener('pointercancel', endSwipe);
 addEventListener('pointerup', endSwipe); // auch ausserhalb der App losgelassen
 
-async function tapFlipQuiet(el, d) {
-  const tile = el.closest('.tile');
-  if (swipe) return switchDev(d.mac, !d.relay, true);
-  swipe = { b: el, tile, busy: true, live: true, dx: 0 };
-  nextPanel(tile, !d.relay, d.name); place(tile, 0.001 * (d.relay ? -1 : 1), false); await wait(20);
-  place(tile, (d.relay ? -1 : 1) * tile.offsetWidth, true); await wait(420);
-  const n = tile.querySelector('.next'), face = tile.querySelector('.face');
-  face.style.transition = 'none'; face.style.transform = ''; swipe = null;
-  await switchDev(d.mac, !d.relay, true);
-  if (n) { n.style.transition = 'opacity .25s'; n.style.opacity = '0'; await wait(260); n.remove(); }
-}
 function tapFlip(el, d) {
   const tile = el.closest('.tile');
   if (d.cfg.lock || !d.online) { shake(tile); toast(d.cfg.lock ? `${d.name}: Tastensperre ist an` : `${d.name} ist nicht erreichbar`, !d.cfg.lock); return; }

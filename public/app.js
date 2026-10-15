@@ -129,7 +129,7 @@ const val = (t) => `<span class="val">${t}</span>`;
 const chev = (t = '') => `<span class="val">${t} ›</span>`;
 
 // Statuszeile unter dem Namen, ohne die Leistung, die schon gross darüber steht
-const subOf = (d) => (!d.online ? 'Offline' : d.relay ? d.status.replace(/^[\d.,]+ k?W( · )?/, '') : d.status === 'Aus' ? '' : d.status.replace(/^Aus · /, ''));
+const subOf = (d) => (!d.online ? d.status : d.relay ? d.status.replace(/^[\d.,]+ k?W( · )?/, '') : d.status === 'Aus' ? '' : d.status.replace(/^Aus · /, ''));
 
 // ---------- Startseite ----------
 function homeHTML() {

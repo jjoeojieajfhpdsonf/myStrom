@@ -183,7 +183,7 @@ function discover() {
     const d = devices.get(mac);
     if ((d && d.ip === from.address) || busy.has(mac)) return;
     busy.add(mac);
-    try { await addByIp(from.address); } catch (e) { console.error('Suche:', from.address, e.message); } finally { busy.delete(mac); }
+    try { await pollDevice(await addByIp(from.address)); } catch (e) { console.error('Suche:', from.address, e.message); } finally { busy.delete(mac); }
   });
   sock.on('error', (e) => console.error('Suche (UDP 7979):', e.message));
   sock.bind(7979);
@@ -590,7 +590,8 @@ if (CFG.demo && !devices.size) {
     devices.set(mac, d); saveDevice(d);
   }
 }
-for (const ip of CFG.hosts) addByIp(ip).catch((e) => console.error('Gerät', ip, e.message));
+server.listen(CFG.port, () => console.log(`myStrom-App läuft auf http://0.0.0.0:${CFG.port}${CFG.demo ? ' (Demo)' : ''}, ${devices.size} Geräte bekannt`));
+for (const ip of CFG.hosts) addByIp(ip).then(pollDevice).catch((e) => console.error('Gerät', ip, e.message));
 discover();
 await syncSolar(); setInterval(syncSolar, 6 * 3600e3);
 await pollAll().catch((e) => console.error('Messen:', e.message));
@@ -610,4 +611,3 @@ function backupDb() {
   } catch (e) { console.error('Backup:', e.message); }
 }
 setTimeout(backupDb, 2 * 60e3); setInterval(backupDb, 30 * 60e3);
-server.listen(CFG.port, () => console.log(`myStrom-App läuft auf http://0.0.0.0:${CFG.port}${CFG.demo ? ' (Demo)' : ''}, ${devices.size} Geräte bekannt`));

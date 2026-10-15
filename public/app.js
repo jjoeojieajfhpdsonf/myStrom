@@ -190,7 +190,7 @@ function show() {
   ghost?.remove(); ghost = null;
   if (dir && !reduced && S) {
     ghost = document.createElement('div');
-    ghost.className = 'ghost';
+    ghost.className = 'page-copy';
     const inner = app.cloneNode(true); inner.removeAttribute('id'); inner.removeAttribute('aria-live');
     ghost.append(inner);
     document.body.append(ghost);
@@ -431,6 +431,17 @@ function chartTip(el, c) {
   const hide = () => { cur?.setAttribute('visibility', 'hidden'); tip?.remove(); tip = null; };
   svg.addEventListener('pointermove', show); svg.addEventListener('pointerdown', show); svg.addEventListener('pointerleave', hide);
 }
+// Gerät für den Verbrauch wählen: Kacheln wie auf der Startseite, gewählte abgedunkelt mit Häkchen
+function devPickHTML() {
+  const chk = '<span class="chk" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 12 4 4 8-8"/></svg></span>';
+  const t = (v, on, icon, label, sub, tmp = '') => `<button type="button" class="tile room ${on ? 'on' : ''} ${view.mac === v ? 'sel' : ''}" data-pickdev="${v}" aria-pressed="${view.mac === v}">
+    ${tmp}<span class="ico">${icon}${view.mac === v ? chk : ''}</span><span class="lb">${label}</span><span class="sub">${sub}</span></button>`;
+  const total = S.devices.reduce((a, d) => a + d.w, 0), totalWh = S.devices.reduce((a, d) => a + d.todayWh, 0);
+  return HD('Gerät wählen', 'energy') + `<div class="grid">
+    ${t('all', false, I.bolt, `${pw(total)}<br>Alle Geräte`, `${kwh(totalWh)} kWh heute`)}
+    ${S.devices.map((d) => t(d.mac, d.relay, I.plug, `${d.relay ? `${pw(d.w)}<br>` : ''}${esc(d.name)}`, `${kwh(d.todayWh)} kWh heute`, d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : '')).join('')}
+  </div>`;
+}
 function energyHTML() {
   const m = view.mac, month = (view.day || S.today).slice(0, 7);
   return HD('Verbrauch', 'home') + chartHTML(m, true) + totalsHTML(m)
@@ -523,6 +534,7 @@ function render(fresh = false) {
   const [r0, r1, r2] = route(), d = r0 === 'dev' ? dev(r1) : null;
   let html;
   if (r0 === 'dev') html = !d ? `${HD('Steckdose', 'home')}<p class="empty-state">Diese Steckdose gibt es nicht mehr.</p>` : r2 ? featureHTML(d, r2) : deviceHTML(d);
+  else if (r0 === 'energy' && r1 === 'pick') html = devPickHTML();
   else html = { energy: energyHTML, scenes: scenesHTML, guard: guardHTML, rules: rulesHTML, alarms: alarmsHTML, more: moreHTML }[r0]?.() ?? (r0 === 'scene' ? sceneHTML(r1) : homeHTML());
   if (fresh || app.dataset.page !== cur()) { app.innerHTML = html; app.dataset.page = cur(); }
   else { const t = app.cloneNode(false); t.innerHTML = html; morph(app, t); }
@@ -609,24 +621,6 @@ function tapFlip(el, d) {
   haptic();
   flip(tile, d, d.relay ? -1 : 1); // aus: nach links weg, an: nach rechts
 }
-// Auswahl als Blatt von unten (wie ein iOS-Menü): Häkchen beim aktuellen Wert, Tippen wählt und schliesst
-function pickSheet(title, options, current, onPick) {
-  document.querySelector('.pick')?.remove();
-  const el = document.createElement('div');
-  el.className = 'pick';
-  el.innerHTML = `<div class="pick-bg" data-close></div><div class="pick-sheet" role="dialog" aria-label="${esc(title)}"><p class="pick-t">${esc(title)}</p>
-    <div class="ls">${options.map(([v, l, sub]) => `<button type="button" class="row" data-v="${esc(v)}"><span class="tx"><b>${esc(l)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</span>${v === current ? '<span class="val" style="color:var(--acc);font-size:20px">✓</span>' : ''}</button>`).join('')}</div>
-    <button type="button" class="btn grey" data-close>Abbrechen</button></div>`;
-  const close = () => { el.classList.remove('open'); setTimeout(() => el.remove(), 260); };
-  el.addEventListener('click', (e) => {
-    const o = e.target.closest('[data-v]');
-    if (o) { haptic(); onPick(o.dataset.v); close(); } else if (e.target.closest('[data-close]')) close();
-  });
-  document.body.append(el);
-  requestAnimationFrame(() => el.classList.add('open'));
-  setTimeout(() => el.classList.add('open'), 50); // falls kein Bild gezeichnet wird
-  el.querySelector('[data-v]')?.focus({ preventScroll: true });
-}
 // ---------- Klicks ----------
 app.addEventListener('click', async (e) => {
   const at = (s) => e.target.closest(s), [r0, r1] = route();
@@ -650,11 +644,8 @@ app.addEventListener('click', async (e) => {
     const n = Number(el.dataset.day), days = dev(r1).cfg.schedule.days;
     saveCfg(r1, { schedule: { days: days.includes(n) ? days.filter((x) => x !== n) : [...days, n] } });
   } else if ((el = at('[data-dayshift]'))) { view.day = addDays(view.day, Number(el.dataset.dayshift)); if (view.day > S.today) view.day = S.today; render(); }
-  else if (at('[data-devsel]')) {
-    haptic();
-    pickSheet('Gerät', [['all', 'Alle Geräte', `${kwh(S.devices.reduce((a, d) => a + d.todayWh, 0))} kWh heute`], ...S.devices.map((d) => [d.mac, d.name, `${d.cfg.room ? `${d.cfg.room} · ` : ''}${kwh(d.todayWh)} kWh heute`])],
-      view.mac, (v) => { view.mac = v; render(); });
-  }
+  else if (at('[data-devsel]')) { haptic(); go('energy/pick'); }
+  else if ((el = at('[data-pickdev]'))) { haptic(); view.mac = el.dataset.pickdev; setTimeout(() => back('energy'), 150); }
   else if ((el = at('[data-run]'))) {
     el.disabled = true; haptic();
     try { const r = await api(`api/scenes/${el.dataset.run}/run`, { method: 'POST' }); await load(); toast(r.ok ? 'Szene ausgeführt' : `Nicht erreicht: ${r.errors.join(', ')}`, !r.ok); } catch (x) { toast(x.message, true); }

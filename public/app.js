@@ -45,7 +45,8 @@ const FEAT = [
   ['temp', 'temp', 'Temperatur'], ['alarms', 'bell', 'Alarme'], ['eval', 'evals', 'Auswertung'],
 ];
 const FTITLE = { schedule: 'Zeitplan', idle: 'Nachts aus, wenn nicht benutzt', vacation: 'Ferienmodus', sun: 'Sonnenauf- und -untergang', timer: 'Timer', saver: 'Stromsparen',
-  temp: 'Temperatur', alarms: 'Alarme', eval: 'Auswertung', settings: 'Einstellungen', tech: 'Technische Details' };
+  temp: 'Temperatur', alarms: 'Alarme', eval: 'Auswertung', settings: 'Einstellungen', tech: 'Technische Details', room: 'Raum' };
+const ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Büro', 'Küche', 'Esszimmer', 'Bad', 'Flur', 'Kinderzimmer', 'Gästezimmer', 'Keller', 'Waschküche', 'Estrich', 'Garage', 'Garten', 'Balkon'];
 const WD = [[1, 'Mo'], [2, 'Di'], [3, 'Mi'], [4, 'Do'], [5, 'Fr'], [6, 'Sa'], [0, 'So']];
 function daysText(days) {
   if (days.length === 7) return 'täglich';
@@ -228,7 +229,7 @@ function deviceHTML(d) {
     </div>`;
 }
 function featureHTML(d, k) {
-  const c = d.cfg, back = k === 'tech' ? `dev/${d.mac}/settings` : `dev/${d.mac}`;
+  const c = d.cfg, back = k === 'tech' || k === 'room' ? `dev/${d.mac}/settings` : `dev/${d.mac}`;
   const head = HD(FTITLE[k], back, '<span></span>', esc(d.name));
   const dim = (on) => (on ? 'ls' : 'ls dim');
   switch (k) {
@@ -278,12 +279,20 @@ function featureHTML(d, k) {
     case 'eval': return head + chartHTML(d.mac, false) + totalsHTML(d.mac);
     case 'settings': return HD('Einstellungen', `dev/${d.mac}`) + `<div class="hero">${I.plug}<b>${esc(d.name)}</b></div>
       <div class="ls">${lrow('Name', `<input type="text" data-in="name" value="${esc(d.cfg.name)}" placeholder="${esc(d.name)}" maxlength="40">`)}
-        ${lrow('Raum', `<input type="text" data-in="room" value="${esc(d.cfg.room)}" placeholder="z. B. Büro" maxlength="40">`)}
+        ${row('Raum', chev(esc(d.cfg.room || 'keiner')), '', `data-go="dev/${d.mac}/room"`)}
         ${lrow('Temperatur-Korrektur', inp('tcorr', 'number', c.tcorr, 'step="0.5" min="-10" max="10"'), '°C, wird zur Messung addiert')}
         ${row('Technische Details', chev(), '', `data-go="dev/${d.mac}/tech"`)}</div>
       <div class="ls"><div class="row"><span class="tx"><b>Solar / Stromproduktion</b><span>misst Produktion statt Verbrauch</span></span>${sw('solar', c.solar, 'Solar')}</div>
         <div class="row"><span class="tx"><b>Tastensperre</b><span>in der App nicht mehr schaltbar</span></span>${sw('lock', c.lock, 'Tastensperre')}</div></div>
       <button type="button" class="btn danger" data-remove="${d.mac}">Steckdose entfernen</button>`;
+    case 'room': {
+      // schon benutzte Räume zuerst (mit Anzahl Steckdosen), dann Vorschläge; Häkchen beim aktuellen
+      const used = [...new Set(S.devices.map((x) => x.cfg.room).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));
+      const pick = (r) => `<button type="button" class="row" data-room="${esc(r)}" aria-pressed="${c.room === r}"><span class="tx"><b>${esc(r || 'Kein Raum')}</b>${r && used.includes(r) ? `<span>${S.devices.filter((x) => x.cfg.room === r).map((x) => esc(x.name)).join(', ')}</span>` : ''}</span>${c.room === r ? '<span class="val" style="color:var(--acc);font-size:20px">✓</span>' : ''}</button>`;
+      return head + (used.length ? `<p class="sec">In Gebrauch</p><div class="ls">${used.map(pick).join('')}</div>` : '')
+        + `<p class="sec">Weitere Räume</p><div class="ls">${ROOMS.filter((r) => !used.includes(r)).map(pick).join('')}${pick('')}</div>`
+        + `<p class="sec">Eigener Raum</p><div class="ls">${lrow('Name', '<input type="text" data-roomnew="1" placeholder="z. B. Werkstatt" maxlength="40" enterkeyhint="done" style="background:#2a2a2a;color:var(--fg);padding:7px 9px;text-align:left">')}</div>`;
+    }
     case 'tech': return head + `<div class="ls">${[['Typ', d.typeName], ['Firmware', d.fw || '–'], ['IP-Adresse', d.ip], ['MAC', d.mac.match(/../g).join(':')], ['Verbindung', d.online ? 'erreichbar' : 'offline'],
       ['Temperatur gemessen', d.tempRaw != null ? `${d.tempRaw.toFixed(1)} °C` : '–'], ['Cloud', 'nicht nötig, alles lokal']].map(([l, v]) => row(l, val(esc(v)))).join('')}</div>`;
     default: return '';
@@ -556,6 +565,7 @@ app.addEventListener('click', async (e) => {
     if (el.dataset.inpage) tapFlip(el, d);
     else go(`dev/${d.mac}`);
   } else if ((el = at('[data-back]'))) back(el.dataset.back);
+  else if ((el = at('[data-room]'))) { saveCfg(r1, { room: el.dataset.room }); setTimeout(() => back(`dev/${r1}/settings`), 180); }
   else if ((el = at('[data-go]'))) go(el.dataset.go);
   else if ((el = at('[data-sw]'))) {
     const on = el.getAttribute('aria-pressed') !== 'true', [mac, p] = el.dataset.sw.includes(':') ? el.dataset.sw.split(':') : [r1, el.dataset.sw];
@@ -594,6 +604,8 @@ app.addEventListener('change', async (e) => {
   if (t.dataset.in) {
     const v = t.type === 'number' ? Number(t.value) : t.value.trim();
     t.blur(); saveCfg(r1, patchOf(t.dataset.in, v));
+  } else if (t.dataset.roomnew && t.value.trim()) {
+    t.blur(); saveCfg(r1, { room: t.value.trim().slice(0, 40) }); setTimeout(() => back(`dev/${r1}/settings`), 180);
   } else if (t.dataset.setting) {
     try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { [t.dataset.setting]: Number(t.value) } }) }); t.blur(); render(); toast('Gespeichert'); } catch (x) { toast(x.message, true); }
   } else if (t.dataset.sceneName) {

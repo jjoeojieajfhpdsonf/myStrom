@@ -1,5 +1,5 @@
 // Steckdosen – Oberfläche im Stil der myStrom-App, mit allen Funktionen (auch PLUS, PRO, DATA PRO, HOME GUARD) frei.
-// Bedienung: Kachel wischen schaltet, tippen öffnet das Gerät. Änderungen speichern sofort, jedes Schalten lässt sich rückgängig machen.
+// Bedienung: Kachel wischen schaltet, tippen öffnet das Gerät. Änderungen speichern sofort.
 'use strict';
 
 const $ = (s, el = document) => el.querySelector(s);

@@ -42,7 +42,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 `);
 const q = {
-  devices: db.prepare('SELECT * FROM devices ORDER BY added'),
+  devices: db.prepare('SELECT * FROM devices ORDER BY added, mac'),
   putDevice: db.prepare('INSERT OR REPLACE INTO devices (mac, ip, type, fw, cfg, added) VALUES (?, ?, ?, ?, ?, ?)'),
   delDevice: db.prepare('DELETE FROM devices WHERE mac = ?'),
   addSample: db.prepare('INSERT OR REPLACE INTO samples (mac, ts, w, relay, temp, wh) VALUES (?, ?, ?, ?, ?, ?)'),

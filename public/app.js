@@ -77,7 +77,7 @@ async function api(p, opt = {}) {
   return j;
 }
 async function load() {
-  try { S = await api('api/state'); render(); } catch (e) { if (!S) app.innerHTML = `<p class="empty-state">Server nicht erreichbar.<br>${esc(e.message)}</p>`; }
+  try { const first = !S; S = await api('api/state'); render(first); } catch (e) { if (!S) app.innerHTML = `<p class="empty-state">Server nicht erreichbar.<br>${esc(e.message)}</p>`; }
 }
 // Einstellungen eines Geräts ändern: sofort anzeigen, dann speichern
 async function saveCfg(mac, patch) {
@@ -113,10 +113,43 @@ async function switchDev(mac, on, quiet = false) {
 const shake = (el) => el?.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(-3px)' }, { transform: 'none' }], 260);
 
 // ---------- Navigation über den Hash (#dev/MAC/idle), damit Zurück und Mitteilungen funktionieren ----------
-const route = () => (location.hash.slice(1) || 'home').split('/');
-function go(h) { if (`#${h}` !== location.hash) location.hash = h; }
-function back(fallback) { if (history.length > 1 && sessionStorage.getItem('nav')) history.back(); else go(fallback); }
-addEventListener('hashchange', () => { sessionStorage.setItem('nav', '1'); scrollTo(0, 0); render(); });
+const cur = () => location.hash.slice(1) || 'home';
+const route = () => cur().split('/');
+const depth = (h) => (h === 'home' ? 0 : h.split('/').length);
+// Verlauf innerhalb der App: Zurück geht zur Seite davor, wenn das die übergeordnete ist, sonst direkt dorthin
+const stack = [cur()], scrolls = {};
+let dir = 0; // 1 = vorwärts, -1 = zurück (für die Animation)
+function go(h) {
+  if (h === cur()) return;
+  scrolls[cur()] = scrollY;
+  stack.push(h); dir = 1;
+  history.pushState(null, '', `#${h}`);
+  show();
+}
+function back(parent) {
+  scrolls[cur()] = scrollY;
+  if (stack.length > 1 && stack[stack.length - 2] === parent) { history.back(); return; } // popstate erledigt den Rest
+  stack.pop(); if (stack[stack.length - 1] !== parent) stack.push(parent);
+  dir = -1;
+  history.replaceState(null, '', `#${parent}`);
+  show();
+}
+// Wischgeste "Zurück" des Browsers oder iOS
+addEventListener('popstate', () => {
+  const h = cur(), i = stack.lastIndexOf(h);
+  dir = i >= 0 && i < stack.length - 1 ? -1 : depth(h) < depth(stack[stack.length - 1] || 'home') ? -1 : 1;
+  if (i >= 0) stack.length = i + 1; else stack.push(h);
+  show();
+});
+// Seitenwechsel: neu aufbauen, Scrollposition merken, kurze Schiebe-Animation wie unter iOS
+function show() {
+  render(true);
+  scrollTo(0, dir < 0 ? scrolls[cur()] || 0 : 0);
+  if (dir && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    app.animate([{ transform: `translateX(${dir * 16}px)`, opacity: 0.5 }, { transform: 'none', opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  }
+  dir = 0;
+}
 const HD = (title, backTo, right = '<span></span>', sub = '') => `<header class="hd"><button type="button" class="ic" data-back="${backTo}" aria-label="Zurück">‹</button><b>${title}${sub ? `<small>${sub}</small>` : ''}</b>${right}</header>`;
 
 // ---------- Bausteine ----------
@@ -141,7 +174,7 @@ function homeHTML() {
   return `<header class="hd"><span></span><b>myStrom</b><button type="button" class="ic" data-go="more" aria-label="Mehr">${I.menu}</button></header>
     <div class="grid">
       ${S.devices.map((d) => `<div class="tile dev ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-mac="${d.mac}">
-        <button type="button" class="hit" data-swipe="${d.mac}" aria-label="${esc(d.name)}, ${d.relay ? 'an' : 'aus'}. Wischen schaltet, Enter schaltet, Tippen öffnet"></button>
+        <button type="button" class="hit" data-swipe="${d.mac}" aria-label="${esc(d.name)}, ${d.relay ? 'an' : 'aus'}. Öffnen; Wischen oder Leertaste schaltet"></button>
         ${d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : ''}${d.cfg.lock ? '<span class="lock" title="Tastensperre">🔒</span>' : ''}
         <span class="ico">${I.plug}</span><span class="lb">${d.relay ? `${pw(d.w)}<br>` : ''}${esc(d.name)}</span>
         ${subOf(d) ? `<span class="sub">${esc(subOf(d))}</span>` : ''}
@@ -264,24 +297,26 @@ function chartHTML(mac, pick) {
   return `<div class="big"><b>${v}<small> ${u}</small></b><span>Verbrauch jetzt</span></div>
     <div class="nav"><button type="button" class="devsel" ${pick ? 'data-devsel="1"' : 'disabled'}>${esc(m === 'all' ? 'Alle Geräte' : d.name)}${pick ? ' ▾' : ''}</button>
       <span class="date">${dayLabel(view.day)}</span><button type="button" class="arr" data-dayshift="-1" aria-label="Tag zurück">‹</button><button type="button" class="arr" data-dayshift="1" aria-label="Tag vor" ${view.day >= S.today ? 'disabled' : ''}>›</button></div>
-    <div class="chart" data-chart="${m}|${view.day}"><div class="empty">Lädt …</div></div>
-    <div class="foot" data-foot><div><b>–<small> kWh</small></b><span>Verbrauch</span></div><i></i><div><b>–<small> CHF</small></b><span>Kosten</span></div></div>`;
+    <div class="chart" data-chart="${m}|${view.day}" data-keep="${m}|${view.day}|${view.day === S.today ? Math.floor(S.now / 60e3) : ''}"><div class="empty">Lädt …</div></div>
+    <div class="foot" data-foot data-keep="${m}|${view.day}|${view.day === S.today ? Math.floor(S.now / 60e3) : ''}"><div><b>–<small> kWh</small></b><span>Verbrauch</span></div><i></i><div><b>–<small> CHF</small></b><span>Kosten</span></div></div>`;
 }
-function totalsHTML(mac) { return `<div class="ls" data-totals="${mac}"></div>`; }
+function totalsHTML(mac) { return `<div class="ls" data-totals="${mac}" data-keep="${mac}|${Math.floor(S.now / 60e3)}"></div>`; }
 // Diagramm und Summen nachladen, nachdem die Seite steht
 async function fillCharts() {
-  for (const el of document.querySelectorAll('[data-chart]')) {
-    const [m, day] = el.dataset.chart.split('|');
+  for (const el of document.querySelectorAll('[data-chart]:not([data-filled])')) {
+    const [m, day] = el.dataset.chart.split('|'), key = el.dataset.keep;
+    el.dataset.filled = key;
     try {
       const c = await curve(m, day);
       if (!el.isConnected) return;
       el.innerHTML = areaSVG(c) + (c.w.some((x) => x != null) ? '' : '<div class="empty">Keine Daten für diesen Tag</div>');
       const foot = $('[data-foot]');
-      if (foot) foot.innerHTML = `<div><b>${kwh(c.wh)}<small> kWh</small></b><span>Verbrauch</span></div><i></i><div><b>${chf(c.wh)}<small> CHF</small></b><span>Kosten</span></div>`;
+      if (foot) { foot.dataset.filled = foot.dataset.keep; foot.innerHTML = `<div><b>${kwh(c.wh)}<small> kWh</small></b><span>Verbrauch</span></div><i></i><div><b>${chf(c.wh)}<small> CHF</small></b><span>Kosten</span></div>`; }
       chartTip(el, c);
     } catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
   }
-  for (const el of document.querySelectorAll('[data-totals]')) {
+  for (const el of document.querySelectorAll('[data-totals]:not([data-filled])')) {
+    el.dataset.filled = el.dataset.keep;
     try {
       const t = await api(`api/totals?mac=${el.dataset.totals}`);
       if (!el.isConnected) return;
@@ -375,15 +410,32 @@ function moreHTML() {
 
 // ---------- Zeichnen ----------
 let swipe = null;
-function render() {
+// Bestehende Knoten an das neue HTML angleichen statt alles zu ersetzen: kein Flackern, Fokus und Diagramme bleiben.
+// Elemente mit data-keep behalten ihren Inhalt, solange der Schlüssel gleich ist (Diagramm, Summen, Verlauf).
+function morph(a, b) {
+  for (const at of [...a.attributes]) if (!b.hasAttribute(at.name) && at.name !== 'data-filled' && at.name !== 'style') a.removeAttribute(at.name);
+  for (const at of b.attributes) if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
+  if (a.tagName === 'INPUT') { if (a !== document.activeElement && a.value !== (b.getAttribute('value') ?? '')) a.value = b.getAttribute('value') ?? ''; return; }
+  if (b.dataset.keep && a.dataset.filled) { if (a.dataset.filled !== b.dataset.keep) delete a.dataset.filled; return; }
+  const ac = [...a.childNodes], bc = [...b.childNodes];
+  bc.forEach((n, i) => {
+    const o = ac[i];
+    if (!o) a.append(n);
+    else if (o.nodeType !== n.nodeType || o.nodeName !== n.nodeName) o.replaceWith(n);
+    else if (n.nodeType === 1) morph(o, n);
+    else if (o.nodeValue !== n.nodeValue) o.nodeValue = n.nodeValue;
+  });
+  for (let i = bc.length; i < ac.length; i++) ac[i].remove();
+}
+function render(fresh = false) {
   if (!S || swipe) return;
-  const a = document.activeElement;
-  if (a && app.contains(a) && a.matches('input')) return; // nicht mitten ins Tippen zeichnen
   const [r0, r1, r2] = route(), d = r0 === 'dev' ? dev(r1) : null;
   let html;
   if (r0 === 'dev') html = !d ? `${HD('Steckdose', 'home')}<p class="empty-state">Diese Steckdose gibt es nicht mehr.</p>` : r2 ? featureHTML(d, r2) : deviceHTML(d);
   else html = { energy: energyHTML, scenes: scenesHTML, guard: guardHTML, rules: rulesHTML, alarms: alarmsHTML, more: moreHTML }[r0]?.() ?? (r0 === 'scene' ? sceneHTML(r1) : homeHTML());
-  if (html !== app.dataset.last) { app.innerHTML = html; app.dataset.last = html; fillCharts(); }
+  if (fresh || app.dataset.page !== cur()) { app.innerHTML = html; app.dataset.page = cur(); }
+  else { const t = app.cloneNode(false); t.innerHTML = html; morph(app, t); }
+  fillCharts();
   if (r0 === 'alarms' && !events) api('api/events?n=40').then((e) => { events = e; const el = $('[data-events]'); if (el) el.innerHTML = eventsHTML(); });
 }
 
@@ -393,6 +445,8 @@ app.addEventListener('pointerdown', (e) => {
   const b = e.target.closest('[data-swipe]'); if (!b) return;
   swipe = { b, tile: b.closest('.tile'), x: e.clientX, y: e.clientY, dx: 0, id: e.pointerId };
 });
+// Sicherheitsnetz: bleibt ein Wischen hängen (z. B. Finger verlässt das Fenster), nach 3 s freigeben
+setInterval(() => { if (swipe && !document.querySelector(':active')) { swipe.tile.style.transform = ''; swipe = null; } }, 3000);
 app.addEventListener('pointermove', (e) => {
   if (!swipe || e.pointerId !== swipe.id) return;
   swipe.dx = e.clientX - swipe.x;
@@ -407,10 +461,11 @@ const endSwipe = () => {
     swiped = Date.now();
     const d = dev(s.b.dataset.swipe);
     if (d.cfg.lock) shake(s.tile); else { store.set('swiped', '1'); switchDev(d.mac, !d.relay); }
-  } else render();
+  } else if (Math.abs(s.dx) > 8) render();
 };
 app.addEventListener('pointerup', endSwipe);
 app.addEventListener('pointercancel', endSwipe);
+addEventListener('pointerup', endSwipe); // auch ausserhalb der App losgelassen
 
 // ---------- Klicks ----------
 app.addEventListener('click', async (e) => {
@@ -419,8 +474,8 @@ app.addEventListener('click', async (e) => {
   if ((el = at('[data-swipe]'))) {
     if (Date.now() - swiped < 450) return;
     const d = dev(el.dataset.swipe);
-    // Tastatur (Enter/Leertaste) und Tippen auf den Schalter der Geräteseite schalten; Tippen auf der Startseite öffnet
-    if (e.detail === 0 || el.dataset.inpage) { if (d.cfg.lock) shake(el.closest('.tile')); else switchDev(d.mac, !d.relay); }
+    // Startseite: Tippen öffnet das Gerät. Geräteseite: die grosse Schalter-Kachel schaltet beim Tippen.
+    if (el.dataset.inpage) { if (d.cfg.lock) shake(el.closest('.tile')); else switchDev(d.mac, !d.relay); }
     else go(`dev/${d.mac}`);
   } else if ((el = at('[data-back]'))) back(el.dataset.back);
   else if ((el = at('[data-go]'))) go(el.dataset.go);
@@ -471,7 +526,12 @@ app.addEventListener('change', async (e) => {
     t.disabled = false;
   }
 });
-app.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input')) e.target.blur(); });
+app.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches('input')) e.target.blur();
+  // Tastatur: Leertaste schaltet die Steckdose, Enter öffnet sie (wie Tippen)
+  const sw = e.target.closest?.('[data-swipe]');
+  if (sw && e.key === ' ' && !sw.dataset.inpage) { e.preventDefault(); const d = dev(sw.dataset.swipe); if (d.cfg.lock) shake(sw.closest('.tile')); else switchDev(d.mac, !d.relay); }
+});
 
 // ---------- Push ----------
 const u8 = (b64) => Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((b64.length + 3) % 4)), (c) => c.charCodeAt(0));

@@ -8,7 +8,7 @@ html { background: var(--bg); }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased; padding: env(safe-area-inset-top) env(safe-area-inset-right) calc(env(safe-area-inset-bottom) + 24px) env(safe-area-inset-left); }
 main { max-width: 640px; margin: 0 auto; }
-button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button { touch-action: manipulation; font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 a { color: var(--acc); }
 ::-webkit-scrollbar { display: none; }
@@ -112,3 +112,10 @@ a { color: var(--acc); }
 .empty-state { color: var(--mut); text-align: center; padding: 40px 24px; }
 @media (min-width: 700px) { .grid { grid-template-columns: repeat(3, 1fr); } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* sofortige Rückmeldung beim Antippen */
+.tile:active:not(.dev) { background: #2e2e2e; }
+.tile.dev:active { filter: brightness(1.12); }
+.row:is(button, label):active { background: #242424; }
+.chip:active, .btn:active, .hd .ic:active { opacity: .6; }
+main { will-change: transform; }

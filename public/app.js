@@ -45,7 +45,7 @@ const FEAT = [
   ['temp', 'temp', 'Temperatur'], ['alarms', 'bell', 'Alarme'], ['eval', 'evals', 'Auswertung'],
 ];
 const FTITLE = { schedule: 'Zeitplan', idle: 'Nachts aus, wenn nicht benutzt', vacation: 'Ferienmodus', sun: 'Sonnenauf- und -untergang', timer: 'Timer', saver: 'Stromsparen',
-  temp: 'Temperatur', alarms: 'Alarme', eval: 'Auswertung', settings: 'Einstellungen', tech: 'Technische Details', room: 'Raum wählen', roomnew: 'Eigener Raum' };
+  temp: 'Temperatur', alarms: 'Alarme', eval: 'Auswertung', settings: 'Einstellungen', tech: 'Technische Details', room: 'Raum wählen', roomnew: 'Eigener Raum', icon: 'Symbol wählen' };
 const RI = (d) => `<svg viewBox="0 0 64 64" width="58" height="58" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">${d}</svg>`;
 const ROOM_ICON = {
   sofa: RI('<path d="M10 26h44v16H10zM14 26v-6h36v6M10 42v4M54 42v4M10 32h44"/><path d="M6 30h4v12H6zM54 30h4v12h-4z"/>'),
@@ -73,6 +73,42 @@ const ROOM_ICON = {
 const ROOMS = [['Babyzimmer', 'baby'], ['Badezimmer', 'bath'], ['Balkon', 'balcony'], ['Büro', 'office'], ['Esszimmer', 'dining'], ['Estrich', 'attic'], ['Flur', 'hall'],
   ['Garage', 'garage'], ['Garten', 'garden'], ['Gästezimmer', 'guest'], ['Heimkino', 'cinema'], ['Keller', 'stairs'], ['Kinderzimmer', 'kids'], ['Küche', 'kitchen'],
   ['Schlafzimmer', 'bed'], ['Waschküche', 'laundry'], ['Werkstatt', 'workshop'], ['Wohnzimmer', 'sofa']];
+// Geräte-Symbole: was an der Steckdose hängt
+const DI = (d) => `<svg viewBox="0 0 64 64" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">${d}</svg>`;
+const DEV_ICONS = [
+  ['plug', 'Steckdose', null],
+  ['lamp', 'Tischlampe', DI('<path d="M22 10h20l8 22H14zM32 32v18M22 54h20"/>')],
+  ['floor', 'Stehlampe', DI('<path d="M24 6h16l6 14H18zM32 20v34M24 56h16"/>')],
+  ['monitor', 'Bildschirm', DI('<path d="M8 12h48v30H8zM26 52h12M32 42v10"/>')],
+  ['pc', 'Computer', DI('<path d="M18 6h28v52H18zM24 14h16M24 20h16"/><circle cx="32" cy="46" r="3"/>')],
+  ['desk', 'Arbeitsplatz', DI('<path d="M20 12h24v16H20zM32 28v6M26 34h12M8 40h48M12 40v16M52 40v16"/>')],
+  ['tv', 'Fernseher', DI('<path d="M6 16h52v32H6zM24 54h16M26 10l6 6 6-6"/>')],
+  ['mirror', 'Smart Mirror', DI('<path d="M16 6h32v52H16zM20 10h24v44H20zM24 16h8M24 21h12M24 26h6"/>')],
+  ['speaker', 'Lautsprecher', DI('<rect x="18" y="6" width="28" height="52" rx="4"/><circle cx="32" cy="38" r="9"/><circle cx="32" cy="19" r="4"/>')],
+  ['coffee', 'Kaffeemaschine', DI('<path d="M14 22h28v16a10 10 0 0 1-10 10h-8a10 10 0 0 1-10-10zM42 26h4a6 6 0 0 1 0 12h-4M10 54h40M22 8c0 4 4 4 4 8M30 8c0 4 4 4 4 8"/>')],
+  ['kettle', 'Wasserkocher', DI('<path d="M18 20h24l4 34H14zM42 24c9 0 9 18 0 18M24 14h12M30 14v6"/>')],
+  ['fan', 'Ventilator', DI('<circle cx="32" cy="26" r="17"/><path d="M32 26c0-8 6-12 10-10s-2 10-10 10zM32 26c-7 4-14 1-13-4s10-3 13 4zM32 26c7 4 6 12 2 13s-6-6-2-13zM32 43v9M22 56h20"/>')],
+  ['heater', 'Heizung', DI('<path d="M10 16h44v32H10zM19 16v32M28 16v32M37 16v32M46 16v32M14 48v6M50 48v6"/>')],
+  ['washer', 'Waschmaschine', DI('<path d="M14 6h36v52H14zM14 16h36"/><circle cx="32" cy="36" r="11"/><circle cx="20" cy="11" r="1.5"/>')],
+  ['fridge', 'Kühlschrank', DI('<path d="M18 4h28v56H18zM18 24h28M24 12v6M24 30v10"/>')],
+  ['router', 'Router', DI('<path d="M8 36h48v14H8zM16 36l-4-20M48 36l4-20M16 43h3M24 43h3M32 43h3"/>')],
+  ['charger', 'Ladestation', DI('<path d="M20 6h24v52H20zM34 20l-6 11h8l-6 11"/>')],
+  ['printer', 'Drucker', DI('<path d="M14 24h36v20H14zM22 24V8h20v16M22 36h20v20H22zM42 30h2"/>')],
+  ['plant', 'Pflanzenlicht', DI('<path d="M20 40h24l-4 16H24zM32 40V24M32 30c-8 0-12-6-12-12 8 0 12 6 12 12M32 26c6 0 10-4 10-10-6 0-10 4-10 10"/>')],
+  ['tree', 'Weihnachtsbaum', DI('<path d="M32 4l12 16h-6l10 14h-8l10 14H14l10-14h-8l10-14h-6zM32 48v10"/>')],
+];
+// eigenes Symbol, sonst am Namen erraten, sonst die Steckdose
+const GUESS = [[/lamp|licht|leuchte/, 'lamp'], [/mirror|spiegel/, 'mirror'], [/\btv\b|fernseh/, 'tv'], [/bildschirm|monitor/, 'monitor'], [/\bpc\b|computer|rechner/, 'pc'],
+  [/schreibtisch|büro|arbeit/, 'desk'], [/kaffee|espresso/, 'coffee'], [/wasserkocher/, 'kettle'], [/ventilator/, 'fan'], [/heiz|radiator/, 'heater'],
+  [/wasch/, 'washer'], [/kühl/, 'fridge'], [/router|wlan|wifi/, 'router'], [/ladestation|ladeger/, 'charger'], [/drucker/, 'printer'], [/pflanz/, 'plant'],
+  [/weihnacht|tannenbaum/, 'tree'], [/lautsprecher|sonos/, 'speaker']];
+function iconKey(d) {
+  if (d.cfg.icon && DEV_ICONS.some(([k]) => k === d.cfg.icon)) return d.cfg.icon;
+  const n = d.name.toLowerCase();
+  return GUESS.find(([re]) => re.test(n))?.[1] || 'plug';
+}
+const devIcon = (d) => DEV_ICONS.find(([k]) => k === iconKey(d))[2] || I.plug;
+const iconName = (d) => DEV_ICONS.find(([k]) => k === iconKey(d))[1];
 const roomIcon = (r) => ROOM_ICON[ROOMS.find(([n]) => n === r)?.[1]] || ROOM_ICON.sofa;
 const WD = [[1, 'Mo'], [2, 'Di'], [3, 'Mi'], [4, 'Do'], [5, 'Fr'], [6, 'Sa'], [0, 'So']];
 function daysText(days) {
@@ -249,7 +285,7 @@ function homeHTML() {
     <div class="grid">
       ${S.devices.map((d) => `<div class="tile dev ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-mac="${d.mac}">
         <div class="face">${d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : ''}${d.cfg.lock ? '<span class="lock" title="Tastensperre">🔒</span>' : ''}
-        <span class="ico">${I.plug}</span><span class="lb">${d.relay ? `${pw(d.w)}<br>` : ''}${esc(d.name)}</span>
+        <span class="ico">${devIcon(d)}</span><span class="lb">${d.relay ? `${pw(d.w)}<br>` : ''}${esc(d.name)}</span>
         ${subOf(d) ? `<span class="sub">${esc(subOf(d))}</span>` : ''}
         <span class="more" aria-hidden="true">›</span></div>
         <button type="button" class="hit" data-swipe="${d.mac}" aria-label="${esc(d.name)}, ${d.relay ? 'an' : 'aus'}. Öffnen; Wischen oder Leertaste schaltet"></button></div>`).join('')}
@@ -273,7 +309,7 @@ function deviceHTML(d) {
     </div>`;
 }
 function featureHTML(d, k) {
-  const c = d.cfg, back = k === 'tech' || k === 'room' ? `dev/${d.mac}/settings` : `dev/${d.mac}`; // roomnew hat eigenes Zurück
+  const c = d.cfg, back = k === 'tech' || k === 'room' || k === 'icon' ? `dev/${d.mac}/settings` : `dev/${d.mac}`; // roomnew hat eigenes Zurück
   const head = HD(FTITLE[k], back, '<span></span>', esc(d.name));
   const dim = (on) => (on ? 'ls' : 'ls dim');
   switch (k) {
@@ -321,9 +357,10 @@ function featureHTML(d, k) {
       <div class="ls">${[['offline', 'Offline', 'keine Antwort seit 3 Minuten'], ['unusual', 'Ungewöhnlicher Verbrauch', 'deutlich mehr als sonst'], ['switchedOn', 'Eingeschaltet', 'am Gerät oder von einer Regel'], ['hot', 'Zu warm', `über ${c.temp.on ? c.temp.max : 45} °C`]]
         .map(([key, l, sub]) => `<div class="row"><span class="tx"><b>${l}</b><span>${sub}</span></span>${sw(`alarms.${key}`, c.alarms[key], l)}</div>`).join('')}</div>`;
     case 'eval': return head + chartHTML(d.mac, false) + totalsHTML(d.mac);
-    case 'settings': return HD('Einstellungen', `dev/${d.mac}`) + `<div class="hero">${I.plug}<b>${esc(d.name)}</b></div>
+    case 'settings': return HD('Einstellungen', `dev/${d.mac}`) + `<div class="hero">${devIcon(d)}<b>${esc(d.name)}</b></div>
       <div class="ls">${lrow('Name', `<input type="text" data-in="name" value="${esc(d.cfg.name)}" placeholder="${esc(d.name)}" maxlength="40">`)}
         ${row('Raum', chev(esc(d.cfg.room || 'keiner')), '', `data-go="dev/${d.mac}/room"`)}
+        ${row('Symbol', chev(esc(iconName(d))), '', `data-go="dev/${d.mac}/icon"`)}
         ${lrow('Temperatur-Korrektur', inp('tcorr', 'number', c.tcorr, 'step="0.5" min="-10" max="10"'), '°C, wird zur Messung addiert')}
         ${row('Technische Details', chev(), '', `data-go="dev/${d.mac}/tech"`)}</div>
       <div class="ls"><div class="row"><span class="tx"><b>Solar / Stromproduktion</b><span>misst Produktion statt Verbrauch</span></span>${sw('solar', c.solar, 'Solar')}</div>
@@ -341,6 +378,13 @@ function featureHTML(d, k) {
         <button type="button" class="tile room" data-go="dev/${d.mac}/roomnew"><span class="ico">${ROOM_ICON.plus}</span><span class="lb">Eigener Raum</span></button>
         ${tileR('', ROOM_ICON.none, 'Kein Raum', false)}
       </div>`;
+    }
+    case 'icon': {
+      // wie die Raum-Auswahl: Kacheln, gewähltes abgedunkelt mit Häkchen; Antippen wählt und geht zurück
+      const curKey = iconKey(d);
+      return HD('Symbol wählen', back) + `<div class="grid">${DEV_ICONS.map(([k, l, svg]) => `<button type="button" class="tile room ${curKey === k ? 'sel' : ''}" data-icon="${k}" aria-pressed="${curKey === k}">
+        <span class="ico">${svg || I.plug}${curKey === k ? '<span class="chk" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 12 4 4 8-8"/></svg></span>' : ''}</span>
+        <span class="lb">${l}</span></button>`).join('')}</div>`;
     }
     case 'roomnew': return HD('Eigener Raum', `dev/${d.mac}/room`) + `<p class="intro">Wie soll der Raum heissen?</p>
       <div class="ls">${lrow('Name', '<input type="text" data-roomnew="1" placeholder="z. B. Werkstatt" maxlength="40" enterkeyhint="done" autocomplete="off" style="background:#2a2a2a;color:var(--fg);padding:7px 9px;text-align:left;max-width:200px">')}</div>
@@ -439,7 +483,7 @@ function devPickTiles() {
   const total = S.devices.reduce((a, d) => a + d.w, 0), totalWh = S.devices.reduce((a, d) => a + d.todayWh, 0);
   return `<div class="grid">
     ${t('all', false, I.bolt, `${pw(total)}<br>Alle Geräte`, `${kwh(totalWh)} kWh heute`)}
-    ${S.devices.map((d) => t(d.mac, d.relay, I.plug, `${d.relay ? `${pw(d.w)}<br>` : ''}${esc(d.name)}`, `${kwh(d.todayWh)} kWh heute`, d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : '')).join('')}
+    ${S.devices.map((d) => t(d.mac, d.relay, devIcon(d), `${d.relay ? `${pw(d.w)}<br>` : ''}${esc(d.name)}`, `${kwh(d.todayWh)} kWh heute`, d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : '')).join('')}
   </div>`;
 }
 function energyHTML() {
@@ -648,6 +692,7 @@ app.addEventListener('click', async (e) => {
     else go(`dev/${d.mac}`);
   } else if ((el = at('[data-back]'))) back(el.dataset.back);
   else if (at('[data-roomadd]')) { const i = $('[data-roomnew]'); if (i.value.trim()) { i.blur(); saveCfg(r1, { room: i.value.trim().slice(0, 40) }); setTimeout(() => back(`dev/${r1}/settings`), 180); } else i.focus(); }
+  else if ((el = at('[data-icon]'))) { haptic(); saveCfg(r1, { icon: el.dataset.icon }); setTimeout(() => back(`dev/${r1}/settings`), 180); }
   else if ((el = at('[data-room]'))) { haptic(); saveCfg(r1, { room: el.dataset.room }); setTimeout(() => back(`dev/${r1}/settings`), 180); }
   else if ((el = at('[data-go]'))) go(el.dataset.go);
   else if ((el = at('[data-sw]'))) {

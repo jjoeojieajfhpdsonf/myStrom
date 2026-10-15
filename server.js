@@ -101,7 +101,7 @@ function sunTimes(day, lat = settings.lat, lon = settings.lon) {
 const DEFAULT_CFG = () => {
   const today = dayKey(Date.now());
   return {
-    name: '', room: '', tcorr: 0, solar: false, lock: false,
+    name: '', room: '', icon: '', tcorr: 0, solar: false, lock: false,
     schedule: { on: false, start: '07:00', end: '23:00', days: [1, 2, 3, 4, 5, 6, 0] },
     idle: { on: false, from: '23:00', to: '07:00', below: 25, mins: 10, backOn: true }, // nachts aus, wenn nicht mehr benutzt
     temp: { on: false, max: 45 },

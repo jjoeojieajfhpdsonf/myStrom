@@ -159,3 +159,7 @@ input, select, textarea { font-size: 16px !important; }
 .pick-hd button { position: absolute; right: 6px; padding: 12px; color: var(--acc); font-weight: 600; }
 .pick-sheet { box-shadow: 0 -1px 0 #2e2e2e, 0 -12px 40px rgb(0 0 0 / .6); }
 .pick-hd::before { content: ""; position: absolute; top: 6px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: #444; }
+
+/* keine Scrollbalken, nirgends (Chrome/Firefox über scrollbar-width, Safari über ::-webkit-scrollbar) */
+html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }

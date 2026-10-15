@@ -135,3 +135,13 @@ html.paging, html.paging body { overflow-x: hidden; }
 
 /* iPhone zoomt in jedes Eingabefeld unter 16 px hinein und bleibt danach vergrössert: Felder darum immer 16 px */
 input, select, textarea { font-size: 16px !important; }
+
+/* Raum wählen: Kacheln wie in myStrom; gewählt = abgedunkelt mit Häkchen, Vorlagen mit weisser Ecke „Neu“ */
+.tile.room .ico { position: relative; }
+.tile.room.sel { background: #0e0e0e; }
+.tile.room.sel .ico svg:first-child { opacity: .35; }
+.tile.room.sel .lb { color: #555; }
+.tile.room .chk { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 42px; height: 42px; border-radius: 50%; border: 2px solid #fff;
+  display: grid; place-items: center; color: #fff; background: rgb(0 0 0 / .35); }
+.tile.room .new { position: absolute; right: 0; bottom: 0; width: 64px; height: 64px; background: linear-gradient(135deg, transparent 50%, #f2f2f2 50%); pointer-events: none; }
+.tile.room .new i { position: absolute; right: 2px; bottom: 16px; transform: rotate(-45deg); font-style: normal; font-size: 11px; color: #bbb; }

@@ -45,8 +45,35 @@ const FEAT = [
   ['temp', 'temp', 'Temperatur'], ['alarms', 'bell', 'Alarme'], ['eval', 'evals', 'Auswertung'],
 ];
 const FTITLE = { schedule: 'Zeitplan', idle: 'Nachts aus, wenn nicht benutzt', vacation: 'Ferienmodus', sun: 'Sonnenauf- und -untergang', timer: 'Timer', saver: 'Stromsparen',
-  temp: 'Temperatur', alarms: 'Alarme', eval: 'Auswertung', settings: 'Einstellungen', tech: 'Technische Details', room: 'Raum' };
-const ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Büro', 'Küche', 'Esszimmer', 'Bad', 'Flur', 'Kinderzimmer', 'Gästezimmer', 'Keller', 'Waschküche', 'Estrich', 'Garage', 'Garten', 'Balkon'];
+  temp: 'Temperatur', alarms: 'Alarme', eval: 'Auswertung', settings: 'Einstellungen', tech: 'Technische Details', room: 'Raum wählen', roomnew: 'Eigener Raum' };
+const RI = (d) => `<svg viewBox="0 0 64 64" width="58" height="58" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">${d}</svg>`;
+const ROOM_ICON = {
+  sofa: RI('<path d="M10 26h44v16H10zM14 26v-6h36v6M10 42v4M54 42v4M10 32h44"/><path d="M6 30h4v12H6zM54 30h4v12h-4z"/>'),
+  bed: RI('<path d="M14 10h36v44H14zM14 18h36M32 18v36M18 22h10v6H18zM36 22h10v6H36z"/><path d="M28 40l-4 4M40 40l-4 4"/>'),
+  attic: RI('<path d="M6 46 32 24l26 22zM44 30v-10h4v14"/><circle cx="32" cy="38" r="4"/><path d="M28 38h8M32 34v8"/>'),
+  baby: RI('<path d="M16 30a16 16 0 0 1 32 0zM16 30h32v6a10 10 0 0 1-10 10H26a10 10 0 0 1-10-10zM48 30l6-8"/><circle cx="22" cy="52" r="3"/><circle cx="42" cy="52" r="3"/>'),
+  balcony: RI('<path d="M22 8h20v28H22zM32 8v28M22 18h20M29 26h-2M37 26h-2"/><path d="M14 36h36v16H14zM18 36v16M23 36v16M28 36v16M33 36v16M38 36v16M43 36v16M48 36v16"/>'),
+  stairs: RI('<path d="M8 12h8v8h8v8h8v8h8v8h8v8h8"/>'),
+  bath: RI('<path d="M8 22h46v16a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6zM12 26h38v10H12zM54 26h4M54 32h4M58 24v10"/><circle cx="20" cy="31" r="1.5"/>'),
+  office: RI('<path d="M20 12h24v18H20zM32 30v8M26 38h12M8 44h48M12 44v12M52 44v12"/>'),
+  dining: RI('<circle cx="32" cy="32" r="12"/><circle cx="32" cy="32" r="7"/><path d="M12 14v8a4 4 0 0 0 4 4v24M16 14v8M20 14v8a4 4 0 0 1-4 4M52 14c-4 2-4 10 0 14v22"/>'),
+  hall: RI('<path d="M18 8h28v48H18zM22 12h20v40H22z"/><circle cx="38" cy="33" r="1.5"/><path d="M10 56h44"/>'),
+  garage: RI('<path d="M6 26 32 10l26 16v30H6zM14 56V32h36v24M14 38h36M14 44h36M14 50h36"/>'),
+  garden: RI('<circle cx="32" cy="24" r="14"/><path d="M32 38v18M32 46l-6-6M32 44l6-6M20 56h24"/>'),
+  guest: RI('<path d="M16 22h32v28H16zM26 22v-6h12v6M16 30h32M24 50v4M40 50v4"/>'),
+  cinema: RI('<path d="M14 26h36v26H14zM14 26 12 18l34-6 2 8zM20 17l4 6M30 15l4 6M40 14l4 6M14 32h36"/><path d="M28 37v10l8-5z"/>'),
+  kids: RI('<circle cx="32" cy="34" r="16"/><path d="M16 30c4-10 28-10 32 0M26 26h22l4 4"/><circle cx="27" cy="38" r="1.5"/><circle cx="37" cy="38" r="1.5"/><path d="M28 44c2 2 6 2 8 0"/>'),
+  kitchen: RI('<path d="M14 28h36v16a8 8 0 0 1-8 8H22a8 8 0 0 1-8-8zM8 30h6M50 30h6M24 22h16M32 22v-4"/><path d="M24 12c0-3 3-3 3-6M32 12c0-3 3-3 3-6M40 12c0-3 3-3 3-6"/>'),
+  laundry: RI('<path d="M14 8h36v48H14zM14 18h36"/><circle cx="32" cy="36" r="11"/><path d="M24 38c4 4 12 4 16-2"/><circle cx="20" cy="13" r="1.5"/><circle cx="26" cy="13" r="1.5"/>'),
+  workshop: RI('<path d="M40 10a10 10 0 0 0-12 13L10 41a5 5 0 0 0 7 7l18-18a10 10 0 0 0 13-12l-6 6-6-1-1-6z"/>'),
+  plus: RI('<circle cx="32" cy="32" r="20"/><path d="M32 22v20M22 32h20"/>'),
+  none: RI('<path d="M14 14h36v36H14z" stroke-dasharray="4 4"/>'),
+};
+// Vorlagen wie in der myStrom-App, alphabetisch
+const ROOMS = [['Babyzimmer', 'baby'], ['Badezimmer', 'bath'], ['Balkon', 'balcony'], ['Büro', 'office'], ['Esszimmer', 'dining'], ['Estrich', 'attic'], ['Flur', 'hall'],
+  ['Garage', 'garage'], ['Garten', 'garden'], ['Gästezimmer', 'guest'], ['Heimkino', 'cinema'], ['Keller', 'stairs'], ['Kinderzimmer', 'kids'], ['Küche', 'kitchen'],
+  ['Schlafzimmer', 'bed'], ['Waschküche', 'laundry'], ['Werkstatt', 'workshop'], ['Wohnzimmer', 'sofa']];
+const roomIcon = (r) => ROOM_ICON[ROOMS.find(([n]) => n === r)?.[1]] || ROOM_ICON.sofa;
 const WD = [[1, 'Mo'], [2, 'Di'], [3, 'Mi'], [4, 'Do'], [5, 'Fr'], [6, 'Sa'], [0, 'So']];
 function daysText(days) {
   if (days.length === 7) return 'täglich';
@@ -127,7 +154,8 @@ function go(h) {
 }
 function back(parent) {
   scrolls[cur()] = scrollY;
-  if (stack.length > 1 && stack[stack.length - 2] === parent) { history.back(); return; } // popstate erledigt den Rest
+  const i = stack.lastIndexOf(parent);
+  if (i >= 0 && i < stack.length - 1) { history.go(i - (stack.length - 1)); return; } // popstate erledigt den Rest
   stack.pop(); if (stack[stack.length - 1] !== parent) stack.push(parent);
   dir = -1;
   history.replaceState(null, '', `#${parent}`);
@@ -229,7 +257,7 @@ function deviceHTML(d) {
     </div>`;
 }
 function featureHTML(d, k) {
-  const c = d.cfg, back = k === 'tech' || k === 'room' ? `dev/${d.mac}/settings` : `dev/${d.mac}`;
+  const c = d.cfg, back = k === 'tech' || k === 'room' ? `dev/${d.mac}/settings` : `dev/${d.mac}`; // roomnew hat eigenes Zurück
   const head = HD(FTITLE[k], back, '<span></span>', esc(d.name));
   const dim = (on) => (on ? 'ls' : 'ls dim');
   switch (k) {
@@ -286,13 +314,21 @@ function featureHTML(d, k) {
         <div class="row"><span class="tx"><b>Tastensperre</b><span>in der App nicht mehr schaltbar</span></span>${sw('lock', c.lock, 'Tastensperre')}</div></div>
       <button type="button" class="btn danger" data-remove="${d.mac}">Steckdose entfernen</button>`;
     case 'room': {
-      // schon benutzte Räume zuerst (mit Anzahl Steckdosen), dann Vorschläge; Häkchen beim aktuellen
+      // wie „Select Room“ in myStrom: benutzte Räume zuerst, dann Vorlagen mit „Neu“; der gewählte abgedunkelt mit Häkchen
       const used = [...new Set(S.devices.map((x) => x.cfg.room).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));
-      const pick = (r) => `<button type="button" class="row" data-room="${esc(r)}" aria-pressed="${c.room === r}"><span class="tx"><b>${esc(r || 'Kein Raum')}</b>${r && used.includes(r) ? `<span>${S.devices.filter((x) => x.cfg.room === r).map((x) => esc(x.name)).join(', ')}</span>` : ''}</span>${c.room === r ? '<span class="val" style="color:var(--acc);font-size:20px">✓</span>' : ''}</button>`;
-      return head + (used.length ? `<p class="sec">In Gebrauch</p><div class="ls">${used.map(pick).join('')}</div>` : '')
-        + `<p class="sec">Weitere Räume</p><div class="ls">${ROOMS.filter((r) => !used.includes(r)).map(pick).join('')}${pick('')}</div>`
-        + `<p class="sec">Eigener Raum</p><div class="ls">${lrow('Name', '<input type="text" data-roomnew="1" placeholder="z. B. Werkstatt" maxlength="40" enterkeyhint="done" style="background:#2a2a2a;color:var(--fg);padding:7px 9px;text-align:left">')}</div>`;
+      const tileR = (r, icon, label, isNew) => `<button type="button" class="tile room ${c.room === r ? 'sel' : ''}" data-room="${esc(r)}" aria-pressed="${c.room === r}">
+        <span class="ico">${icon}${c.room === r ? '<span class="chk" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 12 4 4 8-8"/></svg></span>' : ''}</span>
+        <span class="lb">${esc(label)}</span>${isNew ? '<span class="new" aria-hidden="true"><i>Neu</i></span>' : ''}</button>`;
+      return HD('Raum wählen', back) + `<div class="grid">
+        ${used.map((r) => tileR(r, roomIcon(r), r, false)).join('')}
+        ${ROOMS.filter(([r]) => !used.includes(r)).map(([r, ic]) => tileR(r, ROOM_ICON[ic], r, true)).join('')}
+        <button type="button" class="tile room" data-go="dev/${d.mac}/roomnew"><span class="ico">${ROOM_ICON.plus}</span><span class="lb">Eigener Raum</span></button>
+        ${tileR('', ROOM_ICON.none, 'Kein Raum', false)}
+      </div>`;
     }
+    case 'roomnew': return HD('Eigener Raum', `dev/${d.mac}/room`) + `<p class="intro">Wie soll der Raum heissen?</p>
+      <div class="ls">${lrow('Name', '<input type="text" data-roomnew="1" placeholder="z. B. Werkstatt" maxlength="40" enterkeyhint="done" autocomplete="off" style="background:#2a2a2a;color:var(--fg);padding:7px 9px;text-align:left;max-width:200px">')}</div>
+      <button type="button" class="btn" data-roomadd="1">Hinzufügen</button>`;
     case 'tech': return head + `<div class="ls">${[['Typ', d.typeName], ['Firmware', d.fw || '–'], ['IP-Adresse', d.ip], ['MAC', d.mac.match(/../g).join(':')], ['Verbindung', d.online ? 'erreichbar' : 'offline'],
       ['Temperatur gemessen', d.tempRaw != null ? `${d.tempRaw.toFixed(1)} °C` : '–'], ['Cloud', 'nicht nötig, alles lokal']].map(([l, v]) => row(l, val(esc(v)))).join('')}</div>`;
     default: return '';
@@ -565,6 +601,7 @@ app.addEventListener('click', async (e) => {
     if (el.dataset.inpage) tapFlip(el, d);
     else go(`dev/${d.mac}`);
   } else if ((el = at('[data-back]'))) back(el.dataset.back);
+  else if (at('[data-roomadd]')) { const i = $('[data-roomnew]'); if (i.value.trim()) { i.blur(); saveCfg(r1, { room: i.value.trim().slice(0, 40) }); setTimeout(() => back(`dev/${r1}/settings`), 180); } else i.focus(); }
   else if ((el = at('[data-room]'))) { saveCfg(r1, { room: el.dataset.room }); setTimeout(() => back(`dev/${r1}/settings`), 180); }
   else if ((el = at('[data-go]'))) go(el.dataset.go);
   else if ((el = at('[data-sw]'))) {

@@ -5,3 +5,7 @@ data/
 node_modules/
 .DS_Store
 .env
+
+# Screenshots zum Nachbauen, gehören nicht ins Repo
+CleanShot*
+screenshots/

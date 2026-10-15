@@ -116,6 +116,18 @@ async function saveCfg(mac, patch) {
 }
 const patchOf = (path, v) => path.split('.').reduceRight((acc, k) => ({ [k]: acc }), v);
 
+// ---------- Haptik ----------
+// Android: navigator.vibrate. iPhone (ab iOS 18) kennt das nicht, gibt aber beim Umschalten eines
+// <input type="checkbox" switch> ein leichtes Tippen; das lösen wir unsichtbar aus. Geht nur direkt nach Tippen/Loslassen.
+function haptic(ms = 10) {
+  try {
+    if (navigator.vibrate) { navigator.vibrate(ms); return; }
+    const l = document.createElement('label'), i = document.createElement('input');
+    l.ariaHidden = 'true'; l.style.display = 'none'; i.type = 'checkbox'; i.setAttribute('switch', '');
+    l.append(i); document.head.append(l); l.click(); l.remove();
+  } catch { /* ohne Haptik weiter */ }
+}
+
 // ---------- Schalten ----------
 let toastT;
 function toast(text, err = false) {
@@ -568,6 +580,8 @@ app.addEventListener('pointermove', (e) => {
   // gesperrt oder offline: nur ein kurzes, gebremstes Mitgehen
   swipe.dx = swipe.blocked ? Math.sign(dx) * Math.min(24, Math.abs(dx) / 4) : dx;
   place(swipe.tile, swipe.dx, false);
+  const past = !swipe.blocked && Math.abs(swipe.dx) >= swipe.tile.offsetWidth * 0.4;
+  if (past !== !!swipe.past) { swipe.past = past; if (navigator.vibrate) navigator.vibrate(past ? 12 : 6); }
 });
 const endSwipe = () => {
   if (!swipe || swipe.busy) return;
@@ -575,8 +589,8 @@ const endSwipe = () => {
   if (!s.live) { swipe = null; return; } // war ein Tippen
   swiped = Date.now();
   const d = dev(s.b.dataset.swipe), w = s.tile.offsetWidth;
-  if (s.blocked) { place(s.tile, 0, true); swipe = null; shake(s.tile); toast(d.cfg.lock ? `${d.name}: Tastensperre ist an` : `${d.name} ist nicht erreichbar`, !d.cfg.lock); return; }
-  if (Math.abs(s.dx) >= w * 0.4) { s.busy = true; store.set('swiped', '1'); flip(s.tile, d, Math.sign(s.dx)); }
+  if (s.blocked) { place(s.tile, 0, true); swipe = null; shake(s.tile); haptic([8, 60, 8]); toast(d.cfg.lock ? `${d.name}: Tastensperre ist an` : `${d.name} ist nicht erreichbar`, !d.cfg.lock); return; }
+  if (Math.abs(s.dx) >= w * 0.4) { s.busy = true; store.set('swiped', '1'); haptic(); flip(s.tile, d, Math.sign(s.dx)); }
   else { s.busy = true; place(s.tile, 0, true); setTimeout(() => { s.tile.querySelector('.next')?.remove(); swipe = null; render(); }, 230); }
 };
 app.addEventListener('pointerup', endSwipe);
@@ -585,9 +599,10 @@ addEventListener('pointerup', endSwipe); // auch ausserhalb der App losgelassen
 
 function tapFlip(el, d) {
   const tile = el.closest('.tile');
-  if (d.cfg.lock || !d.online) { shake(tile); toast(d.cfg.lock ? `${d.name}: Tastensperre ist an` : `${d.name} ist nicht erreichbar`, !d.cfg.lock); return; }
+  if (d.cfg.lock || !d.online) { shake(tile); haptic([8, 60, 8]); toast(d.cfg.lock ? `${d.name}: Tastensperre ist an` : `${d.name} ist nicht erreichbar`, !d.cfg.lock); return; }
   if (swipe) return;
   swipe = { b: el, tile, busy: true, live: true, dx: 0 };
+  haptic();
   flip(tile, d, d.relay ? -1 : 1); // aus: nach links weg, an: nach rechts
 }
 // ---------- Klicks ----------
@@ -602,20 +617,20 @@ app.addEventListener('click', async (e) => {
     else go(`dev/${d.mac}`);
   } else if ((el = at('[data-back]'))) back(el.dataset.back);
   else if (at('[data-roomadd]')) { const i = $('[data-roomnew]'); if (i.value.trim()) { i.blur(); saveCfg(r1, { room: i.value.trim().slice(0, 40) }); setTimeout(() => back(`dev/${r1}/settings`), 180); } else i.focus(); }
-  else if ((el = at('[data-room]'))) { saveCfg(r1, { room: el.dataset.room }); setTimeout(() => back(`dev/${r1}/settings`), 180); }
+  else if ((el = at('[data-room]'))) { haptic(); saveCfg(r1, { room: el.dataset.room }); setTimeout(() => back(`dev/${r1}/settings`), 180); }
   else if ((el = at('[data-go]'))) go(el.dataset.go);
   else if ((el = at('[data-sw]'))) {
     const on = el.getAttribute('aria-pressed') !== 'true', [mac, p] = el.dataset.sw.includes(':') ? el.dataset.sw.split(':') : [r1, el.dataset.sw];
-    el.setAttribute('aria-pressed', on);
+    el.setAttribute('aria-pressed', on); haptic();
     saveCfg(mac, patchOf(p, on));
-  } else if ((el = at('[data-set]'))) saveCfg(r1, patchOf(el.dataset.set, /^\d+$/.test(el.dataset.v) ? Number(el.dataset.v) : el.dataset.v));
+  } else if ((el = at('[data-set]'))) haptic(), saveCfg(r1, patchOf(el.dataset.set, /^\d+$/.test(el.dataset.v) ? Number(el.dataset.v) : el.dataset.v));
   else if ((el = at('[data-day]'))) {
     const n = Number(el.dataset.day), days = dev(r1).cfg.schedule.days;
     saveCfg(r1, { schedule: { days: days.includes(n) ? days.filter((x) => x !== n) : [...days, n] } });
   } else if ((el = at('[data-dayshift]'))) { view.day = addDays(view.day, Number(el.dataset.dayshift)); if (view.day > S.today) view.day = S.today; render(); }
   else if (at('[data-devsel]')) { const ids = ['all', ...S.devices.map((d) => d.mac)]; view.mac = ids[(ids.indexOf(view.mac) + 1) % ids.length]; render(); }
   else if ((el = at('[data-run]'))) {
-    el.disabled = true;
+    el.disabled = true; haptic();
     try { const r = await api(`api/scenes/${el.dataset.run}/run`, { method: 'POST' }); await load(); toast(r.ok ? 'Szene ausgeführt' : `Nicht erreicht: ${r.errors.join(', ')}`, !r.ok); } catch (x) { toast(x.message, true); }
     el.disabled = false;
   } else if (at('[data-newscene]')) {

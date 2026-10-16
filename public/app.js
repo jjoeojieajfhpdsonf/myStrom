@@ -227,7 +227,7 @@ function show() {
   ghost?.remove(); ghost = null;
   if (dir && !reduced && S) {
     ghost = document.createElement('div');
-    ghost.className = 'page-copy';
+    ghost.className = `page-copy${oldScroll > 4 ? ' scrolled' : ''}`; // Kopie behält die abgesetzte Kopfzeile, wenn gescrollt war
     const inner = app.cloneNode(true); inner.removeAttribute('id'); inner.removeAttribute('aria-live');
     ghost.append(inner);
     document.body.append(ghost);

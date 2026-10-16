@@ -131,7 +131,8 @@ main { position: relative; z-index: 2; background: var(--bg); min-height: 100vh;
 .page-copy { position: fixed; inset: 0; overflow: hidden; pointer-events: none; background: var(--bg);
   padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
 .page-copy > main { min-height: 100%; }
-html.paging, html.paging body { overflow-x: hidden; }
+/* clip statt hidden: hidden macht body zum Scroll-Container, dann rutscht die Kopfzeile beim Wechsel mit dem Inhalt weg */
+html.paging, html.paging body { overflow-x: clip; }
 
 /* iPhone zoomt in jedes Eingabefeld unter 16 px hinein und bleibt danach vergrössert: Felder darum immer 16 px */
 input, select, textarea { font-size: 16px !important; }

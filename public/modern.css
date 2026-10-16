@@ -19,7 +19,7 @@ main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: m
 .hd { top: env(safe-area-inset-top, 0px); margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))) 12px; padding: 6px max(10px, env(safe-area-inset-left, 0px)); min-height: 56px;
   background: transparent; border-bottom: 1px solid transparent; transition: background-color .2s, border-color .2s; }
 /* erst beim Scrollen abgesetzt, oben fliesst der Hintergrund durch */
-html.scrolled .hd { background: rgb(11 13 16 / .72); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); border-bottom-color: var(--line); }
+html.scrolled .hd, .page-copy.scrolled .hd { background: rgb(11 13 16 / .72); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); border-bottom-color: var(--line); }
 .hd b { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
 .hd .ic { width: 44px; height: 44px; border-radius: 50%; background: rgb(255 255 255 / .06); font-size: 22px; }
 .hd .ic svg { width: 20px; height: 20px; }
@@ -155,3 +155,5 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline-color: var(
 .stp button[data-step] { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
 /* gewählte Chips (Tage, Dauer, Design …) dezent wie die eingeschalteten Kacheln statt voller grüner Fläche */
 .chip[aria-pressed="true"] { background: var(--on-chip); color: var(--on-chiptxt); box-shadow: inset 0 0 0 1px var(--on-line); font-weight: 600; }
+/* beim Seitenwechsel springt die Kopfzeile ohne Überblenden in den richtigen Zustand */
+html.paging .hd { transition: none; }

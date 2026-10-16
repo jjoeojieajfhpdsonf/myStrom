@@ -635,7 +635,7 @@ function chartTip(el, c) {
 // Geräte für den Verbrauch wählen: Overlay von unten mit Kacheln wie auf der Startseite; mehrere wählbar (Summe), gewählte mit Häkchen
 function devPickTiles() {
   const chk = '<span class="chk" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 12 4 4 8-8"/></svg></span>';
-  const picked = view.mac === 'all' ? ['all'] : view.mac.split(',');
+  const picked = view.mac === 'all' ? ['all', ...S.devices.map((d) => d.mac)] : view.mac.split(',');
   const t = (v, on, icon, label, sub, tmp = '') => { const sel = picked.includes(v); return `<button type="button" class="tile room ${on ? 'on' : ''} ${sel ? 'sel' : ''}" data-pickdev="${v}" aria-pressed="${sel}">
     ${tmp}<span class="ico">${icon}${sel ? chk : ''}</span><span class="lb">${label}</span><span class="sub">${sub}</span></button>`; };
   const total = S.devices.reduce((a, d) => a + d.w, 0), totalWh = S.devices.reduce((a, d) => a + d.todayWh, 0);
@@ -876,7 +876,7 @@ function openDevPick() {
     const o = e.target.closest('[data-pickdev]');
     if (o) {
       haptic();
-      const v = o.dataset.pickdev, cur = view.mac === 'all' ? [] : view.mac.split(',');
+      const v = o.dataset.pickdev, cur = pickedMacs(view.mac); // bei „Alle“ sind alle gewählt, Antippen nimmt eines weg
       const next = v === 'all' ? [] : cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
       const ordered = S.devices.map((d) => d.mac).filter((x) => next.includes(x));
       view.mac = !ordered.length || ordered.length === S.devices.length ? 'all' : ordered.join(',');

@@ -13,6 +13,11 @@
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="modern.css" id="theme-modern">
+  <script>
+    // Design vor dem ersten Bild wählen (kein Aufblitzen): Standard ist "Modern", "myStrom" schaltet es ab
+    try { if (localStorage.getItem('design') === 'mystrom') document.getElementById('theme-modern').disabled = true; } catch { /* Standard */ }
+  </script>
 </head>
 <body>
   <main id="app" aria-live="polite"></main>

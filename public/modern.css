@@ -1,0 +1,111 @@
+/* Steckdosen, modern: gleicher Aufbau, gleiche Knöpfe an derselben Stelle; Kacheln als abgerundete Flächen mit Abstand,
+   Glas-Kopfzeile, gruppierte Listen, grünes Leuchten für "an". Bewusst nur dunkel, wie die App. */
+:root {
+  --bg: #0b0d10; --bg2: #101318; --tile: #171b21; --tile2: #1c2128; --list: #161a20; --line: rgb(255 255 255 / .06);
+  --fg: #eef1f4; --mut: #8b939e; --acc: #63d11a; --acc2: #3f9e05; --red: #ff5a4e;
+  --r: 22px; --r-s: 14px; --gap: 10px;
+  --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+html { background: var(--bg); }
+body { background: radial-gradient(120% 60% at 50% -10%, #17202a 0%, var(--bg) 60%) fixed, var(--bg); color: var(--fg); font-family: var(--ui); font-size: 15px; letter-spacing: -.005em; }
+main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: radial-gradient(120% 60% at 50% -10%, #17202a 0%, var(--bg) 60%) var(--bg); }
+.page-copy { background: var(--bg); }
+
+/* Kopfzeile aus Glas, gleiche Position der Knöpfe */
+.hd { top: env(safe-area-inset-top, 0px); margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))) 12px; padding: 6px max(10px, env(safe-area-inset-left, 0px)); min-height: 56px;
+  background: rgb(11 13 16 / .72); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); border-bottom: 1px solid var(--line); }
+.hd b { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+.hd .ic { width: 44px; height: 44px; border-radius: 50%; background: rgb(255 255 255 / .06); font-size: 22px; }
+.hd .ic svg { width: 20px; height: 20px; }
+
+/* Kacheln: abgerundet, mit Abstand, leichter Verlauf */
+.grid { gap: var(--gap); }
+.tile { border-radius: var(--r); background: linear-gradient(160deg, var(--tile2), var(--tile)); box-shadow: inset 0 1px 0 rgb(255 255 255 / .05), 0 1px 2px rgb(0 0 0 / .4); color: var(--fg); }
+.tile .lb { font-weight: 500; }
+.tile .sub { color: var(--mut); }
+.tile .ico { color: #cfd5dc; }
+.tile:active:not(.dev) { background: var(--tile2); transform: scale(.98); }
+.tile.on, .tile.dev.on .face { background: linear-gradient(150deg, #76e02a, var(--acc2)); color: #0b1a02; box-shadow: 0 10px 28px rgb(99 209 26 / .28), inset 0 1px 0 rgb(255 255 255 / .35); }
+.tile.on .ico, .tile.dev.on .face .ico { color: #0b1a02; }
+.tile.on .sub, .tile.dev.on .face .sub { color: rgb(11 26 2 / .7); }
+.grid.home .tile.on .lb { color: #0b1a02; }
+.tile.dev { background: transparent; box-shadow: none; }
+.tile.dev .face { border-radius: var(--r); background: linear-gradient(160deg, var(--tile2), var(--tile)); box-shadow: inset 0 1px 0 rgb(255 255 255 / .05); }
+.tile .tmp { top: 12px; right: 14px; font-size: 12.5px; font-variant-numeric: tabular-nums; padding: 3px 8px; border-radius: 999px; background: rgb(255 255 255 / .07); }
+.tile.dev.on .tmp { background: rgb(0 0 0 / .12); }
+.tile .lock { top: 12px; left: 14px; }
+.tile.dev .next { border-radius: var(--r); }
+.tile.dev .next.to-off { background: linear-gradient(150deg, #ff6a5c, #d1342a); }
+.tile.dev .next.to-on { background: linear-gradient(150deg, #76e02a, var(--acc2)); color: #0b1a02; }
+.tile.feat.act::after { left: 18px; right: auto; bottom: 14px; width: 8px; height: 8px; border-radius: 50%; background: var(--acc); box-shadow: 0 0 10px var(--acc); }
+.tile.feat.act .sub { color: #9fe36a; }
+.grid.home .tile .dim { color: var(--mut); }
+.grid.home .tile .lb { color: var(--fg); font-size: 15.5px; }
+.hint { padding-top: 14px; }
+
+/* Raum, Symbol, Gerät wählen */
+.tile.room.sel { background: #0f1216; box-shadow: inset 0 0 0 2px var(--acc); }
+.tile.room.sel .lb { color: var(--mut); }
+.tile.room .chk { border-color: var(--acc); color: #0b1a02; background: var(--acc); width: 34px; height: 34px; }
+.tile.room .new { width: 56px; height: 24px; right: 10px; bottom: 10px; background: rgb(99 209 26 / .16); border-radius: 999px; }
+.tile.room .new i { position: static; transform: none; display: grid; place-items: center; height: 100%; color: #9fe36a; font-size: 11px; font-weight: 600; letter-spacing: .03em; }
+
+/* Listen als gruppierte Karten */
+.ls { background: var(--list); border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; margin: 0 0 18px; }
+.row { border-top: 1px solid var(--line); min-height: 54px; }
+.row .tx b { font-weight: 500; }
+.row .tx span, .row .val { color: var(--mut); }
+.row input:not([type=checkbox]), .row select { background: rgb(255 255 255 / .06); border-radius: 10px; }
+.row input[type=text] { background: transparent; }
+.row:is(button, label):active { background: rgb(255 255 255 / .04); }
+.sec { padding: 6px 4px 8px; font-size: 12px; font-weight: 600; letter-spacing: .08em; color: var(--mut); }
+.note, .intro { padding-left: 4px; padding-right: 4px; }
+.intro { color: #c3cad2; }
+
+/* Schalter, Wahlknöpfe, Knöpfe */
+.sw { background: #2a3038; }
+.sw[aria-pressed="true"] { background: linear-gradient(150deg, #76e02a, var(--acc2)); }
+.chips { padding: 0; }
+.chip { box-shadow: none; background: rgb(255 255 255 / .07); }
+.chip[aria-pressed="true"] { background: var(--acc); color: #0b1a02; font-weight: 600; }
+.btn { width: 100%; margin: 0 0 12px; border-radius: 16px; background: linear-gradient(150deg, #76e02a, var(--acc2)); color: #0b1a02; font-weight: 700; }
+.btn.ghost { background: transparent; color: var(--acc); box-shadow: inset 0 0 0 1.5px rgb(99 209 26 / .6); }
+.btn.grey { background: rgb(255 255 255 / .08); color: var(--fg); font-weight: 600; }
+.btn.danger { background: rgb(255 90 78 / .1); color: var(--red); box-shadow: none; }
+
+/* Verbrauch */
+.big { padding-top: 10px; }
+.big b { font-size: 56px; font-weight: 300; letter-spacing: -.02em; }
+.big b small { font-size: 18px; letter-spacing: 0; color: var(--mut); }
+.periods { margin: 14px 0 0; background: rgb(255 255 255 / .06); border-radius: 12px; padding: 3px; }
+.periods button { border-radius: 9px; color: var(--mut); }
+.periods button[aria-pressed="true"] { background: var(--tile2); color: var(--fg); box-shadow: 0 1px 3px rgb(0 0 0 / .4); }
+.nav { padding: 14px 0 8px; }
+.nav .devsel { border: 0; background: rgb(255 255 255 / .07); border-radius: 999px; padding: 6px 14px; font-weight: 500; }
+.nav .arr { border: 0; background: rgb(255 255 255 / .07); border-radius: 50%; }
+.chart { background: var(--list); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 8px 6px 2px; }
+.chart svg path[fill="#bdbdbd"] { fill: rgb(99 209 26 / .22); }
+.chart svg path[stroke="#efefef"] { stroke: var(--acc); stroke-width: 1.4; }
+.chart svg line[stroke="#3a3a3a"] { stroke: rgb(255 255 255 / .06); }
+.chart svg text { fill: var(--mut); }
+.chart svg rect[fill="#bdbdbd"] { fill: #3a4350; }
+.chart svg rect[fill="#5ab400"] { fill: var(--acc); }
+.chart .tip { background: var(--fg); color: var(--bg); border-radius: 999px; padding: 4px 10px; font-weight: 600; }
+.foot { margin-top: 10px; padding: 16px 6px; background: var(--list); border: 1px solid var(--line); border-radius: var(--r); }
+.foot i { background: var(--line); height: 40px; }
+.foot b { font-size: 30px; font-weight: 400; }
+.foot small { color: var(--mut); }
+.foot + .ls, .chart + .foot + .ls { margin-top: 18px; }
+
+/* Geräteseite, Einstellungen, Overlay, Meldung */
+.hero { padding: 10px 0 22px; }
+.hero svg { width: 64px; height: 64px; color: #cfd5dc; }
+#toast { border-radius: 999px; background: rgb(28 33 40 / .92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--line); font-weight: 500; }
+#toast.err { background: rgb(80 24 20 / .92); }
+.pick-sheet { background: var(--bg2); border-radius: 28px 28px 0 0; padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: max(14px, env(safe-area-inset-right, 0px)); }
+.pick-sheet .grid { padding-bottom: 14px; }
+.order .row { background: var(--list); }
+.handle { border-radius: 12px; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline-color: var(--acc); }
+@media (min-width: 700px) { .grid { grid-template-columns: repeat(3, 1fr); } }

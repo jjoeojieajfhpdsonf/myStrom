@@ -716,6 +716,13 @@ function eventsHTML() {
     const when = t.toDateString() === new Date().toDateString() ? t.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : t.toLocaleDateString('de-CH', { day: 'numeric', month: 'numeric' });
     return `<div class="row ev"><time>${when}</time><span class="tx"><b>${esc(d?.name || e.mac)} ${e.kind === 'on' ? 'an' : e.kind === 'off' ? 'aus' : ''}</b><span>${e.kind === 'alarm' ? '⚠︎ ' : ''}${esc(e.text)}</span></span></div>`; }).join('');
 }
+// Design: "Modern" (Standard) oder "myStrom" wie die Original-App; gilt pro Gerät
+const design = () => (store.get('design') === 'mystrom' ? 'mystrom' : 'modern');
+function setDesign(v) {
+  store.set('design', v);
+  const l = document.getElementById('theme-modern'); if (l) l.disabled = v === 'mystrom';
+  app.dataset.page = ''; render();
+}
 function moreHTML() {
   const s = S.settings;
   return HD('Mehr', 'home') + `<p class="sec">Strom</p><div class="ls">${lrow('Preis pro kWh', `<input type="number" data-setting="price" value="${s.price}" step="0.01" min="0" max="2" inputmode="decimal">`, 'CHF')}</div>
@@ -723,6 +730,7 @@ function moreHTML() {
       ${lrow('Ort', `<input type="text" data-place="1" value="${esc(s.place || '')}" placeholder="z. B. Zürich" maxlength="80" enterkeyhint="search" autocomplete="off" style="max-width:200px">`, `${Number(s.lat).toFixed(2)}, ${Number(s.lon).toFixed(2)}${S.sun ? ` · Sonne ${S.sun.rise}–${S.sun.set}` : ''}`)}
       ${'geolocation' in navigator ? row('Standort vom Handy übernehmen', chev(), 'einmalig, nach deiner Freigabe', 'data-geo="1"') : ''}</div>
     <p class="note">Nur für Sonnenauf- und -untergang. Ein eingetippter Ort wird einmal bei Open-Meteo nachgeschlagen; vom Handy kommen die Koordinaten direkt.</p>
+    <p class="sec">Design</p><div class="chips">${[['modern', 'Modern'], ['mystrom', 'myStrom']].map(([v, l]) => `<button type="button" class="chip" data-design="${v}" aria-pressed="${design() === v}">${l}</button>`).join('')}</div>
     <p class="sec">Startseite</p><div class="ls">${row('Kacheln anordnen', chev(), 'Reihenfolge der Kacheln auf der Startseite', 'data-go="order"')}</div>
     <p class="sec">Steckdosen</p><div class="ls">${S.devices.map((d) => row(esc(d.name), chev(esc(d.ip)), `${esc(d.typeName)} · ${d.online ? 'erreichbar' : 'offline'}`, `data-go="dev/${d.mac}/settings"`)).join('')}
       ${lrow('Per IP hinzufügen', '<input type="text" id="addip" placeholder="192.168.0.42" inputmode="decimal" style="background:#2a2a2a;color:#e8e8e8;padding:7px 9px;text-align:left;max-width:160px">')}</div>
@@ -882,6 +890,7 @@ app.addEventListener('click', async (e) => {
   else if ((el = at('[data-exp-mac]'))) { exp.mac = el.dataset.expMac; render(); }
   else if ((el = at('[data-exp-range]'))) { [exp.from, exp.to] = el.dataset.expRange.split('|'); render(); }
   else if ((el = at('[data-exp-res]'))) { exp.res = el.dataset.expRes; render(); }
+  else if ((el = at('[data-design]'))) { haptic(); setDesign(el.dataset.design); }
   else if (at('[data-orderreset]')) { haptic(); saveOrder([]); }
   else if ((el = at('[data-stime]'))) { haptic(); const s = S.scenes.find((x) => x.id === el.dataset.stime); s.time.on = !s.time.on; saveScenes(); }
   else if ((el = at('[data-sday]'))) { const [id, n] = el.dataset.sday.split('|'), s = S.scenes.find((x) => x.id === id), k = Number(n); s.time.days = s.time.days.includes(k) ? s.time.days.filter((x) => x !== k) : [...s.time.days, k]; saveScenes(); }

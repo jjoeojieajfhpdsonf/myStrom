@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import crypto from 'node:crypto';
+import os from 'node:os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const env = process.env;
@@ -23,10 +24,18 @@ const CFG = {
   demo: env.DEMO === '1',
   hosts: (env.DEVICES || '').split(',').map((s) => s.trim()).filter(Boolean), // feste IPs zusätzlich zur automatischen Suche
   pushContact: env.PUSH_CONTACT || 'mailto:mystrom-app@example.com',
+  // Adresse, unter der Taster diesen Server im WLAN erreichen (sonst die erste IPv4-Adresse des Rechners)
+  lanUrl: env.LAN_URL || '',
 };
 
 const DEFAULT_SETTINGS = { price: Number(env.TARIFF || 0.30), lat: Number(env.LAT || 47.37), lon: Number(env.LON || 8.54), place: '' };
-const TYPES = { 101: 'WiFi Switch CH v1', 106: 'WiFi Switch CH v2', 107: 'WiFi Switch EU', 120: 'WiFi Switch Zero', 125: 'WiFi Switch CH v2' };
+const TYPES = { 101: 'WiFi Switch CH v1', 106: 'WiFi Switch CH v2', 107: 'WiFi Switch EU', 120: 'WiFi Switch Zero', 125: 'WiFi Switch CH v2',
+  102: 'WiFi Bulb', 105: 'WiFi LED Strip', 103: 'WiFi Button Plus', 104: 'WiFi Button', 118: 'WiFi Button Plus (2. Gen.)', 110: 'WiFi Motion Sensor' };
+// Geräteart: switch (Steckdose), bulb (Lampe, LED-Streifen), button (Taster), motion (Bewegungsmelder)
+const KINDS = { 101: 'switch', 106: 'switch', 107: 'switch', 120: 'switch', 125: 'switch', 102: 'bulb', 105: 'bulb', 103: 'button', 104: 'button', 118: 'button', 110: 'motion' };
+const kindOf = (d) => KINDS[d.type] || 'switch';
+const switchable = (d) => ['switch', 'bulb'].includes(kindOf(d));
+const BTN_ACTS = ['single', 'double', 'long', 'touch'];
 
 // ---------- Datenbank ----------
 mkdirSync(path.dirname(CFG.dbPath), { recursive: true });
@@ -115,22 +124,30 @@ const DEFAULT_CFG = () => {
     alarms: { offline: true, unusual: true, switchedOn: false, hot: true },
     saver: { on: false, below: 5, mins: 30, back: 'time', at: '07:00', hours: 2 },
     timer: { on: false, mins: 120 },
+    // Lampe: zuletzt gewählte Farbe als HSV (Farbton 0–360, Sättigung 0–100, Helligkeit 1–100)
+    light: { h: 30, s: 20, v: 80 },
+    // Taster: je Druck nichts, ein Gerät umschalten/ein/aus oder eine Szene
+    button: Object.fromEntries(BTN_ACTS.map((k) => [k, { do: 'none', mac: '', scene: '' }])),
+    // Bewegungsmelder: bei Bewegung Geräte einschalten (wahlweise nur bei Dunkelheit), nach x min ohne Bewegung wieder aus
+    motion: { on: false, targets: [], dark: true, lux: 30, mins: 5 },
   };
 };
 // Eingaben nach dem Muster der Standardwerte prüfen: Zeit, Datum, Zahl, Ja/Nein, Text, Wochentage
-const LIMITS = { price: [0, 5], lat: [-90, 90], lon: [-180, 180], tcorr: [-10, 10], below: [0, 3000], mins: [1, 1440], max: [20, 90], onOffset: [-180, 180], offOffset: [-180, 180], hours: [1, 48] };
+const LIMITS = { h: [0, 360], s: [0, 100], v: [1, 100], lux: [0, 2000], price: [0, 5], lat: [-90, 90], lon: [-180, 180], tcorr: [-10, 10], below: [0, 3000], mins: [1, 1440], max: [20, 90], onOffset: [-180, 180], offOffset: [-180, 180], hours: [1, 48] };
 function clean(def, val, key = '') {
   if (val === undefined || val === null) return def;
   if (typeof def === 'boolean') return Boolean(val);
   if (typeof def === 'number') { const n = Number(val), [lo, hi] = LIMITS[key] || [-1e6, 1e6]; return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : def; }
   if (key === 'actions') return cleanActions(val);
   if (key === 'schedule') return cleanSchedule(val);
+  if (key === 'targets') return Array.isArray(val) ? [...new Set(val.map(String).filter((m) => /^[0-9A-Z]{12}$/.test(m)))].slice(0, 20) : def;
   if (Array.isArray(def)) return Array.isArray(val) ? [...new Set(val.map(Number).filter((x) => Number.isInteger(x) && x >= 0 && x <= 6))] : def;
   if (typeof def === 'object') return Object.fromEntries(Object.entries(def).map(([k, d]) => [k, clean(d, val[k], k)]));
   const s = String(val).trim();
   if (/^\d{2}:\d{2}$/.test(def)) return /^([01]\d|2[0-3]):[0-5]\d$/.test(s) ? s : def;
   if (/^\d{4}-\d{2}-\d{2}$/.test(def)) return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : def;
   if (key === 'back') return ['hand', 'time', 'after'].includes(s) ? s : def;
+  if (key === 'do') return ['none', 'toggle', 'on', 'off', 'scene'].includes(s) ? s : def;
   return s.slice(0, 40);
 }
 // Zeitpläne prüfen; alte Form (ein start/end/days) wird zum ersten Eintrag. Ein Tag, der schon vergeben ist, fällt beim späteren weg.
@@ -178,13 +195,22 @@ function migrateIdle(c) {
 }
 for (const r of q.devices.all()) devices.set(r.mac, { ...r, cfg: clean(DEFAULT_CFG(), migrateIdle(JSON.parse(r.cfg || '{}'))) });
 const saveDevice = (d) => q.putDevice.run(d.mac, d.ip, d.type, d.fw, JSON.stringify(d.cfg), d.added);
-const nameOf = (d) => d.cfg.name || `Steckdose ${d.mac.slice(-4)}`;
+const nameOf = (d) => d.cfg.name || `${{ bulb: 'Lampe', button: 'Taster', motion: 'Bewegungsmelder' }[kindOf(d)] || 'Steckdose'} ${d.mac.slice(-4)}`;
 // Laufzustand (nicht gespeichert): Messwerte, Verbindungsfehler, Zähler der Regeln
 const rt = new Map();
 const R = (mac) => { if (!rt.has(mac)) rt.set(mac, { online: false, fails: 0, w: 0, relay: false, temp: null, seen: 0 }); return rt.get(mac); };
 
 // Demo: drei simulierte Steckdosen, damit sich die App ohne echte Geräte ausprobieren lässt
-const demo = { DEMO00000001: { relay: true, e: 0 }, DEMO00000002: { relay: true, e: 0 }, DEMO00000003: { relay: false, e: 0 } };
+const demo = { DEMO00000001: { relay: true, e: 0 }, DEMO00000002: { relay: true, e: 0 }, DEMO00000003: { relay: false, e: 0 },
+  DEMO00000004: { on: false, color: '30;20;80' }, DEMO00000005: { voltage: 3.9, charge: false }, DEMO00000006: { motionUntil: 0 } };
+const DEMO_EXTRA = [['DEMO00000004', 102, 'Stehlampe', 'Wohnzimmer'], ['DEMO00000005', 104, 'Taster Eingang', 'Eingang'], ['DEMO00000006', 110, 'Bewegung Flur', 'Flur']];
+// Demo-Bewegungsmelder: alle paar Minuten jemand im Flur; Helligkeit folgt grob dem Tag
+function demoSensors() {
+  const s = demo.DEMO00000006, now = Date.now(), m = minOfDay(now);
+  if (now > s.motionUntil + 4 * 60e3 && Math.random() < 0.15) s.motionUntil = now + 45e3;
+  const day = m > 7 * 60 && m < 19 * 60, lux = day ? 180 + Math.round(Math.random() * 60) : 4 + Math.round(Math.random() * 6);
+  return { motion: now < s.motionUntil, light: lux, temperature: 21 + Math.random() };
+}
 function demoReport(mac) {
   const s = demo[mac], m = minOfDay(Date.now()), j = Math.random();
   const base = mac.endsWith('1') ? (m >= 7 * 60 + 30 && m < 23 * 60 + 40 ? 95 + j * 40 : 28 + j * 3) : mac.endsWith('2') ? 26 + j * 4 : 9;
@@ -192,24 +218,38 @@ function demoReport(mac) {
   return { power: w, relay: s.relay, temperature: 22 + j, boot_id: 'DEMO', energy_since_boot: s.e };
 }
 
-async function devFetch(d, p, timeout = 4000) {
+async function devFetch(d, p, timeout = 4000, body) {
   if (CFG.demo) {
+    const s = demo[d.mac];
+    if (p.startsWith('/api/v1/device/')) {
+      if (kindOf(d) === 'button') return { [d.mac]: { type: 'button', battery: true, reachable: true, charge: s.charge, voltage: s.voltage, fw_version: '2.74', ...Object.fromEntries(BTN_ACTS.map((k) => [k, s[k] || ''])) } };
+      if (body) {
+        const f = new URLSearchParams(body);
+        if (kindOf(d) === 'button') { for (const k of BTN_ACTS) if (f.has(k)) s[k] = f.get(k); return {}; }
+        const a = f.get('action'); if (a) s.on = a === 'toggle' ? !s.on : a === 'on'; if (f.get('color')) s.color = f.get('color');
+      }
+      const v = Number(s.color.split(';')[2] || 100);
+      return { [d.mac]: { type: 'rgblamp', on: s.on, color: s.color, mode: 'hsv', power: s.on ? Math.round((1.2 + 8.3 * v / 100) * 10) / 10 : 0.4, fw_version: '2.58' } };
+    }
+    if (p === '/api/v1/sensors') return demoSensors();
     if (p === '/report') return demoReport(d.mac);
     const m = /relay\?state=(\d)/.exec(p); if (m) demo[d.mac].relay = m[1] === '1';
     return {};
   }
-  const r = await fetch(`http://${d.ip}${p}`, { signal: AbortSignal.timeout(timeout) });
+  const r = await fetch(`http://${d.ip}${p}`, body ? { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(timeout) } : { signal: AbortSignal.timeout(timeout) });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const t = await r.text();
   return t ? JSON.parse(t) : {};
 }
 // Gerät per IP aufnehmen oder aktualisieren (Name und Regeln bleiben)
-async function addByIp(ip) {
-  const info = await fetch(`http://${ip}/api/v1/info`, { signal: AbortSignal.timeout(4000) }).then((r) => r.json());
+async function addByIp(ip, hint) {
+  let info;
+  try { info = await fetch(`http://${ip}/api/v1/info`, { signal: AbortSignal.timeout(4000) }).then((r) => r.json()); }
+  catch (e) { if (!hint) throw e; info = { mac: hint.mac, type: hint.type }; } // schlafender Taster: Angaben aus der UDP-Meldung
   const mac = String(info.mac || '').toUpperCase().replace(/[^0-9A-F]/g, '');
   if (mac.length !== 12) throw new Error('Unter dieser Adresse antwortet kein myStrom-Gerät.');
   const old = devices.get(mac);
-  const d = { mac, ip, type: info.type ?? old?.type ?? null, fw: info.version ?? old?.fw ?? null, cfg: old?.cfg || DEFAULT_CFG(), added: old?.added || Date.now() };
+  const d = { mac, ip, type: info.type ?? hint?.type ?? old?.type ?? null, fw: info.version ?? old?.fw ?? null, cfg: old?.cfg || DEFAULT_CFG(), added: old?.added || Date.now() };
   if (!old) logEvent(mac, 'info', `Gefunden unter ${ip}`);
   else if (old.ip !== ip) logEvent(mac, 'info', `Neue Adresse ${ip}`);
   devices.set(mac, d); saveDevice(d);
@@ -224,11 +264,12 @@ function discover() {
   sock.on('message', async (msg, from) => {
     if (msg.length < 7) return;
     const mac = msg.subarray(0, 6).toString('hex').toUpperCase(), type = msg[6];
-    if (![101, 106, 107, 120, 125].includes(type)) return; // nur Steckdosen (keine Taster, Lampen, Bulbs)
+    if (!KINDS[type]) return; // Steckdosen, Lampen, Taster, Bewegungsmelder (Gateways u. a. nicht)
     const d = devices.get(mac);
+    if (d && kindOf(d) === 'button') { const r = R(mac); r.seen = Date.now(); r.online = true; if (d.ip === from.address) { buttonAwake(d); return; } }
     if ((d && d.ip === from.address) || busy.has(mac)) return;
     busy.add(mac);
-    try { await pollDevice(await addByIp(from.address)); } catch (e) { console.error('Suche:', from.address, e.message); } finally { busy.delete(mac); }
+    try { const n = await addByIp(from.address, { mac, type }); if (kindOf(n) === 'button') buttonAwake(n); else await pollDevice(n); } catch (e) { console.error('Suche:', from.address, e.message); } finally { busy.delete(mac); }
   });
   sock.on('error', (e) => console.error('Suche (UDP 7979):', e.message));
   sock.bind(7979);
@@ -240,10 +281,53 @@ function logEvent(mac, kind, text) { q.addEvent.run(Date.now(), mac, kind, text)
 async function setRelay(mac, on, why) {
   const d = devices.get(mac), r = R(mac);
   if (!d) throw new Error('Unbekanntes Gerät.');
-  await devFetch(d, `/relay?state=${on ? 1 : 0}`);
+  if (kindOf(d) === 'bulb') await devFetch(d, `/api/v1/device/${d.mac}`, 4000, `action=${on ? 'on' : 'off'}&ramp=400`);
+  else if (kindOf(d) === 'switch') await devFetch(d, `/relay?state=${on ? 1 : 0}`);
+  else throw new Error(`${nameOf(d)} lässt sich nicht schalten.`);
   r.expect = { relay: on, until: Date.now() + CFG.pollMs * 2 };
   if (r.relay !== on) edge(d, on, why);
   r.relay = on; if (!on) r.w = 0;
+}
+// Lampe: Farbe und Helligkeit (HSV), schaltet dabei ein
+async function setLight(mac, { h, s: sat, v }) {
+  const d = devices.get(mac), r = R(mac);
+  d.cfg.light = clean(DEFAULT_CFG().light, { h, s: sat, v }); saveDevice(d);
+  const c = d.cfg.light;
+  await devFetch(d, `/api/v1/device/${d.mac}`, 4000, `action=on&ramp=300&color=${encodeURIComponent(`${c.h};${c.s};${c.v}`)}`);
+  r.color = `${c.h};${c.s};${c.v}`; r.expect = { relay: true, until: Date.now() + CFG.pollMs * 2 };
+  if (!r.relay) edge(d, true, 'von Hand in der App'); r.relay = true;
+}
+// Taster: eigene Adresse im WLAN, damit der Taster uns aufrufen kann
+function lanBase() {
+  if (CFG.lanUrl) return CFG.lanUrl.replace(/\/$/, '').replace(/^https?:\/\//, '');
+  const ip = Object.values(os.networkInterfaces()).flat().find((x) => x && x.family === 'IPv4' && !x.internal)?.address || '127.0.0.1';
+  return `${ip}:${CFG.port}`;
+}
+// Was der Taster bei jedem Druck aufruft: leer = nichts, sonst unsere Adresse; get:// heisst GET (siehe REST-API des Tasters)
+const buttonUrls = (d) => Object.fromEntries(BTN_ACTS.map((k) => [k, d.cfg.button[k].do === 'none' ? '' : `get://${lanBase()}/api/button/${d.mac}/${k}`]));
+// Taster ist wach (meldet sich nach einem Druck oder am USB-Kabel): Akku lesen und, falls nötig, die Aktionen übertragen
+async function buttonAwake(d) {
+  const r = R(d.mac); if (r.syncing) return; r.syncing = true;
+  try {
+    const want = buttonUrls(d), info = (await devFetch(d, `/api/v1/device/${d.mac}`, 3000))[d.mac] || {};
+    r.voltage = info.voltage ?? r.voltage; r.charge = info.charge ?? r.charge; r.online = true; r.seen = Date.now();
+    const diff = BTN_ACTS.filter((k) => (info[k] ?? '') !== want[k] && !(k === 'touch' && d.type === 104));
+    if (diff.length) { await devFetch(d, `/api/v1/device/${d.mac}`, 3000, diff.map((k) => `${k}=${encodeURIComponent(want[k])}`).join('&')); logEvent(d.mac, 'info', 'Tasten-Aktionen übertragen'); }
+    r.synced = JSON.stringify(want);
+  } catch (e) { r.synced = null; } finally { r.syncing = false; }
+}
+// Druck auf einem Taster ausführen
+async function buttonPress(d, k) {
+  const a = d.cfg.button[k], r = R(d.mac);
+  r.seen = Date.now(); r.online = true; r.lastPress = { k, ts: Date.now() };
+  const label = { single: 'einmal gedrückt', double: 'zweimal gedrückt', long: 'lang gedrückt', touch: 'berührt' }[k];
+  setTimeout(() => buttonAwake(d), 300); // wach: gleich Akku lesen und Aktionen abgleichen
+  if (a.do === 'scene') { await runScene(a.scene); logEvent(d.mac, 'info', `${label}: Szene`); return; }
+  const t = devices.get(a.mac);
+  if (!t || !switchable(t) || t.cfg.lock) return;
+  const on = a.do === 'toggle' ? !R(t.mac).relay : a.do === 'on';
+  if (R(t.mac).relay !== on) await setRelay(t.mac, on, `über ${nameOf(d)}`);
+  logEvent(d.mac, 'info', `${label}: ${nameOf(t)} ${on ? 'an' : 'aus'}`);
 }
 // Ein- oder Ausschalten erkannt (von uns, am Gerät oder von einer anderen App)
 function edge(d, on, why) {
@@ -255,11 +339,22 @@ function edge(d, on, why) {
 }
 
 // ---------- Messen ----------
+// Lampe meldet an/aus, Farbe und Leistung; als Bericht wie bei der Steckdose, damit Verbrauch und Regeln gleich funktionieren
+function bulbReport(d, x) { R(d.mac).color = x.color ?? null; return { relay: Boolean(x.on), power: Number(x.power) || 0 }; }
 let lastTick = Date.now();
 async function pollDevice(d) {
-  const r = R(d.mac), now = Date.now();
+  const r = R(d.mac), now = Date.now(), kind = kindOf(d);
+  if (kind === 'button') { if (r.seen && now - r.seen > 36 * 3600e3) r.online = false; return; } // Taster schlafen, melden sich selbst
   try {
-    const rep = await devFetch(d, '/report');
+    if (kind === 'motion') {
+      const x = await devFetch(d, '/api/v1/sensors');
+      r.online = true; r.fails = 0; r.seen = now; r.offlineSent = false;
+      r.motion = Boolean(x.motion); if (r.motion) r.lastMotion = now;
+      r.light = x.light ?? null; r.temp = x.temperature ?? null;
+      q.addSample.run(d.mac, now, 0, r.motion ? 1 : 0, r.temp, 0);
+      return;
+    }
+    const rep = kind === 'bulb' ? bulbReport(d, (await devFetch(d, `/api/v1/device/${d.mac}`))[d.mac] || {}) : await devFetch(d, '/report');
     const relay = Boolean(rep.relay), w = Math.max(0, Number(rep.power) || 0);
     // Energie aus dem Zähler des Geräts (Wattsekunden seit dem Start), sonst Leistung mal Zeit
     let wh = 0;
@@ -319,6 +414,19 @@ function usualMax(mac) {
   }
   return p99Cache.v[mac];
 }
+// Licht bei Bewegung: einschalten (wenn gewünscht nur bei Dunkelheit), nach x min ohne Bewegung wieder aus – aber nur,
+// was der Melder selbst eingeschaltet hat (von Hand Eingeschaltetes bleibt an)
+async function motionRule(d, now) {
+  const c = d.cfg.motion, r = R(d.mac); r.mOn ||= new Set();
+  if (!c.on) { r.mOn.clear(); return; }
+  const targets = c.targets.map((m) => devices.get(m)).filter((t) => t && switchable(t) && !t.cfg.lock);
+  if (r.motion && (!c.dark || r.light == null || r.light < c.lux || r.mOn.size)) {
+    for (const t of targets) if (!R(t.mac).relay && R(t.mac).online) { await setRelay(t.mac, true, `Bewegung (${nameOf(d)})`); r.mOn.add(t.mac); }
+  } else if (r.mOn.size && now - (r.lastMotion || 0) >= c.mins * 60e3) {
+    for (const m of r.mOn) if (R(m).relay) await setRelay(m, false, `keine Bewegung mehr (${nameOf(d)})`).catch(() => {});
+    r.mOn.clear();
+  }
+}
 // Zeitplan mit „erst aus, wenn nicht mehr benutzt“: gilt von „Aus um“ bis zum nächsten „Ein um“, höchstens 12 Stunden.
 // Ohne gespeicherten Zustand berechnet, damit ein Neustart des Servers nichts verliert.
 function idleWatch(c, now) {
@@ -338,6 +446,8 @@ function idleWatch(c, now) {
 async function runRules(d, prev, now) {
   const c = d.cfg, r = R(d.mac), m = minOfDay(now), day = dayKey(now), crossed = crossedFn(prev, now);
   if (!r.online) return;
+  if (kindOf(d) === 'motion') return motionRule(d, now);
+  if (kindOf(d) === 'button') return;
   const sw = async (on, why) => { if (r.relay !== on) await setRelay(d.mac, on, why); };
   // Zeitplan
   const t = c.schedule.on && c.schedule.entries.find((e) => e.days.includes(weekday(now)));
@@ -413,8 +523,11 @@ async function runAction(d, a) {
 }
 
 // ---------- Status für die App ----------
+const ago = (ts) => { const m = Math.round((Date.now() - ts) / 60e3); return m < 1 ? 'gerade eben' : m < 60 ? `vor ${m} min` : m < 1440 ? `um ${clock(ts)}` : `am ${dShort(dayKey(ts))}`; };
 function statusText(d) {
   const r = R(d.mac), c = d.cfg, now = Date.now(), m = minOfDay(now);
+  if (kindOf(d) === 'button') return r.lastPress ? `zuletzt ${ago(r.lastPress.ts)} gedrückt` : r.seen ? `zuletzt aktiv ${ago(r.seen)}` : 'meldet sich nach dem ersten Drücken';
+  if (kindOf(d) === 'motion') { if (!r.online) return r.seen ? `Offline seit ${clock(r.seen)}` : 'Wird verbunden …'; return r.motion ? 'Bewegung' : r.lastMotion ? `Bewegung ${ago(r.lastMotion)}` : 'keine Bewegung'; }
   if (!r.online) return r.seen ? `Offline seit ${clock(r.seen)}` : 'Wird verbunden …';
   const iw = r.relay && idleWatch(c, now);
   if (iw) {
@@ -439,7 +552,10 @@ const sinceWh = (mac, ts) => sumOver(mac, () => q.sumWhAll.get(ts).wh, (m) => q.
 function deviceJson(d) {
   const r = R(d.mac), today = dayKey(Date.now());
   return {
-    mac: d.mac, ip: d.ip, type: d.type, typeName: TYPES[d.type] || `Typ ${d.type}`, fw: d.fw, name: nameOf(d), cfg: d.cfg,
+    mac: d.mac, ip: d.ip, type: d.type, kind: kindOf(d), typeName: TYPES[d.type] || `Typ ${d.type}`, fw: d.fw, name: nameOf(d), cfg: d.cfg,
+    ...(kindOf(d) === 'bulb' ? { color: r.color || null } : {}),
+    ...(kindOf(d) === 'button' ? { voltage: r.voltage ?? null, charge: r.charge ?? null, battery: r.voltage == null ? null : Math.max(0, Math.min(100, Math.round((r.voltage - 3.3) / 0.9 * 100))), lastPress: r.lastPress || null, synced: r.synced === JSON.stringify(buttonUrls(d)), touch: d.type !== 104 } : {}),
+    ...(kindOf(d) === 'motion' ? { motion: Boolean(r.motion), light: r.light ?? null, lastMotion: r.lastMotion || null } : {}),
     online: r.online, relay: r.relay, w: r.w, temp: r.temp == null ? null : Math.round((r.temp + d.cfg.tcorr) * 10) / 10, tempRaw: r.temp,
     status: statusText(d), todayWh: sinceWh(d.mac, dayStart(today)), lowSince: r.lowSince || null, onSince: r.onSince || null,
     vacationToday: vacationSlots(d, today).map((s) => ({ key: s.key, start: min2hm(s.start), end: min2hm(s.end) })),
@@ -548,11 +664,11 @@ function cleanScenes(list) {
 async function runScene(id) {
   const s = meta('scenes', DEFAULT_SCENES).find((x) => x.id === id);
   if (!s) throw new Error('Unbekannte Szene.');
-  const acts = Object.keys(s.actions).length ? s.actions : Object.fromEntries([...devices.keys()].map((m) => [m, 'off'])); // leer = alles aus
+  const acts = Object.keys(s.actions).length ? s.actions : Object.fromEntries([...devices.values()].filter(switchable).map((x) => [x.mac, 'off'])); // leer = alles aus
   const errors = [];
   for (const [mac, a] of Object.entries(acts)) {
     const d = devices.get(mac);
-    if (!d || d.cfg.lock) continue;
+    if (!d || d.cfg.lock || !switchable(d)) continue;
     try { if (R(mac).relay !== (a === 'on')) await setRelay(mac, a === 'on', `Szene ${s.name}`); } catch { errors.push(nameOf(d)); }
   }
   return { ok: !errors.length, errors };
@@ -658,10 +774,23 @@ const server = http.createServer(async (req, res) => {
       await setRelay(dev.mac, Boolean(b.on), 'von Hand in der App');
       return json(deviceJson(dev));
     }
+    const lm = /^\/api\/devices\/([0-9A-Z]{12})\/light$/.exec(p);
+    if (lm && req.method === 'POST') {
+      const d = devices.get(lm[1]); if (!d || kindOf(d) !== 'bulb') return json({ error: 'Keine Lampe.' }, 404);
+      if (!R(d.mac).online) return json({ error: `${nameOf(d)} ist nicht erreichbar.` }, 503);
+      await setLight(d.mac, await readBody(req)); return json(deviceJson(d));
+    }
+    // vom Taster aufgerufen (GET) oder in der App zum Ausprobieren (POST)
+    const bm = /^\/api\/button\/([0-9A-Z]{12})\/(single|double|long|touch)$/.exec(p);
+    if (bm) {
+      const d = devices.get(bm[1]); if (!d || kindOf(d) !== 'button') return json({ error: 'Kein Taster.' }, 404);
+      await buttonPress(d, bm[2]); return json(deviceJson(d));
+    }
     if (dm && req.method === 'PUT') {
       const b = await readBody(req);
       dev.cfg = clean(DEFAULT_CFG(), merge(dev.cfg, b.cfg || {}));
       saveDevice(dev);
+      if (kindOf(dev) === 'button' && b.cfg?.button) { R(dev.mac).synced = null; buttonAwake(dev); } // klappt, wenn er gerade wach ist; sonst beim nächsten Drücken
       return json(deviceJson(dev));
     }
     if (dm && req.method === 'DELETE') {
@@ -754,6 +883,16 @@ if (CFG.demo && !devices.size) {
     const d = { mac, ip: `demo-${mac.slice(-1)}`, type: 106, fw: '4.0.14', cfg, added: Date.now() };
     devices.set(mac, d); saveDevice(d);
   }
+}
+// Demo: dazu eine Lampe, ein Taster und ein Bewegungsmelder (auch in älteren Demo-Datenbanken)
+if (CFG.demo) for (const [mac, type, name, room] of DEMO_EXTRA) {
+  if (!devices.has(mac)) {
+    const cfg = { ...DEFAULT_CFG(), name, room };
+    if (type === 104) { cfg.button.single = { do: 'toggle', mac: 'DEMO00000004', scene: '' }; cfg.button.long = { do: 'scene', mac: '', scene: 'alles-aus' }; }
+    if (type === 110) cfg.motion = { on: true, targets: ['DEMO00000004'], dark: true, lux: 30, mins: 2 };
+    const d = { mac, ip: `demo-${mac.slice(-1)}`, type, fw: '2.74', cfg, added: Date.now() }; devices.set(mac, d); saveDevice(d);
+  }
+  if (type === 104) Object.assign(R(mac), { online: true, seen: Date.now(), voltage: 3.9, charge: false });
 }
 server.listen(CFG.port, () => console.log(`myStrom-App läuft auf http://0.0.0.0:${CFG.port}${CFG.demo ? ' (Demo)' : ''}, ${devices.size} Geräte bekannt`));
 for (const ip of CFG.hosts) addByIp(ip).then(pollDevice).catch((e) => console.error('Gerät', ip, e.message));

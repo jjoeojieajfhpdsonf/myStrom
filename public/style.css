@@ -256,3 +256,11 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .foot.three { grid-template-columns: 1fr 2px 1fr 2px 1fr; }
 .foot.three b { font-size: 22px; }
 .nav .sp { flex: 1; }
+
+.swatches { display: flex; flex-wrap: wrap; gap: 12px; padding: 4px 16px 14px; }
+.swatch { width: 40px; height: 40px; border-radius: 50%; background: var(--c); border: 0; }
+.swatch.sel { box-shadow: 0 0 0 2px #000, 0 0 0 4px #fff; }
+.row.bright { gap: 14px; }
+.row.bright input[type=range] { flex: 1; min-width: 120px; max-width: 220px; accent-color: var(--acc); background: transparent; padding: 0; }
+.hero .dim { display: block; color: var(--mut); font-size: 14px; }
+.hero.live { color: var(--acc); }

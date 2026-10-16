@@ -546,8 +546,11 @@ function eventsHTML() {
 }
 function moreHTML() {
   const s = S.settings;
-  return HD('Mehr', 'home') + `<p class="sec">Strom</p><div class="ls">${lrow('Preis pro kWh', `<input type="number" data-setting="price" value="${s.price}" step="0.01" min="0" max="2" inputmode="decimal">`, s.priceFromSolar ? 'CHF, vom Solar-Dashboard' : 'CHF')}</div>
-    <p class="sec">Standort</p><div class="ls">${row(esc(s.place || 'Für Sonnenauf- und -untergang'), val(`${Number(s.lat).toFixed(2)}, ${Number(s.lon).toFixed(2)}`), S.sun ? `heute ${S.sun.rise} – ${S.sun.set}` : '')}</div>
+  return HD('Mehr', 'home') + `<p class="sec">Strom</p><div class="ls">${lrow('Preis pro kWh', `<input type="number" data-setting="price" value="${s.price}" step="0.01" min="0" max="2" inputmode="decimal">`, 'CHF')}</div>
+    <p class="sec">Standort</p><div class="ls">
+      ${lrow('Ort', `<input type="text" data-place="1" value="${esc(s.place || '')}" placeholder="z. B. Zürich" maxlength="80" enterkeyhint="search" autocomplete="off" style="max-width:200px">`, `${Number(s.lat).toFixed(2)}, ${Number(s.lon).toFixed(2)}${S.sun ? ` · Sonne ${S.sun.rise}–${S.sun.set}` : ''}`)}
+      ${'geolocation' in navigator ? row('Standort vom Handy übernehmen', chev(), 'einmalig, nach deiner Freigabe', 'data-geo="1"') : ''}</div>
+    <p class="note">Nur für Sonnenauf- und -untergang. Ein eingetippter Ort wird einmal bei Open-Meteo nachgeschlagen; vom Handy kommen die Koordinaten direkt.</p>
     <p class="sec">Steckdosen</p><div class="ls">${S.devices.map((d) => row(esc(d.name), chev(esc(d.ip)), `${esc(d.typeName)} · ${d.online ? 'erreichbar' : 'offline'}`, `data-go="dev/${d.mac}/settings"`)).join('')}
       ${lrow('Per IP hinzufügen', '<input type="text" id="addip" placeholder="192.168.0.42" inputmode="decimal" style="background:#2a2a2a;color:#e8e8e8;padding:7px 9px;text-align:left;max-width:160px">')}</div>
     <p class="note">Neue Steckdosen im WLAN findet die App von selbst. Eine IP brauchst du nur, wenn sie sich nicht meldet.</p>
@@ -724,6 +727,13 @@ app.addEventListener('click', async (e) => {
     if (!confirm(`${d.name} aus der App entfernen? Der Verlauf bleibt gespeichert; meldet sich die Steckdose wieder, erscheint sie neu.`)) return;
     try { await api(`api/devices/${d.mac}`, { method: 'DELETE' }); await load(); go('home'); } catch (x) { toast(x.message, true); }
   } else if (at('[data-push]')) { try { await pushEnable(); toast('Mitteilungen sind an'); await load(); } catch (x) { toast(x.message, true); } }
+  else if (at('[data-geo]')) {
+    haptic();
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const lat = Math.round(pos.coords.latitude * 1e4) / 1e4, lon = Math.round(pos.coords.longitude * 1e4) / 1e4;
+      try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { lat, lon } }) }); toast('Standort übernommen'); load(); } catch (x) { toast(x.message, true); }
+    }, (err) => toast(err.code === 1 ? 'Standort nicht freigegeben (in den Einstellungen des Handys änderbar)' : 'Standort nicht verfügbar', true), { timeout: 15000, maximumAge: 600000 });
+  }
   else if (at('[data-pushtest]')) { try { await api('api/push/test', { method: 'POST' }); toast('Test gesendet'); } catch (x) { toast(x.message, true); } }
 });
 // Eingaben: speichern, sobald ein Feld fertig ist
@@ -734,6 +744,10 @@ app.addEventListener('change', async (e) => {
     t.blur(); saveCfg(r1, patchOf(t.dataset.in, v));
   } else if (t.dataset.roomnew && t.value.trim()) {
     t.blur(); saveCfg(r1, { room: t.value.trim().slice(0, 40) }); setTimeout(() => back(`dev/${r1}/settings`), 180);
+  } else if (t.dataset.place && t.value.trim() && t.value.trim() !== S.settings.place) {
+    t.blur();
+    try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { place: t.value.trim() } }) }); render(); toast(`Gefunden: ${S.settings.place}`); load(); }
+    catch (x) { toast(x.message, true); render(); }
   } else if (t.dataset.setting) {
     try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { [t.dataset.setting]: Number(t.value) } }) }); t.blur(); render(); toast('Gespeichert'); } catch (x) { toast(x.message, true); }
   } else if (t.dataset.sceneName) {

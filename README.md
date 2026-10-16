@@ -25,7 +25,7 @@ Eigene App für die myStrom WiFi Switches im Heimnetz, im Aussehen der myStrom-A
   - ungewöhnlich hoher Verbrauch (verglichen mit den letzten 14 Tagen)
   - Steckdose eingeschaltet
   - Steckdose zu warm
-- **Solar-Dashboard:** Standort und Strompreis werden von dort übernommen (`SOLAR_URL`).
+- **Standort und Strompreis** stellst du unter „Mehr“ ein. Den Ort tippst du ein (Suche bei Open-Meteo) oder übernimmst ihn vom Handy. Er dient nur für Sonnenauf- und -untergang.
 
 Die Tastensperre und die Temperatur-Korrektur wirken in der App. Die Einstellungen in der Steckdose selbst bleiben unverändert, der Knopf am Gerät schaltet also weiterhin.
 

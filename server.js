@@ -22,7 +22,6 @@ const CFG = {
   tz: env.TZ || 'Europe/Zurich',
   demo: env.DEMO === '1',
   hosts: (env.DEVICES || '').split(',').map((s) => s.trim()).filter(Boolean), // feste IPs zusätzlich zur automatischen Suche
-  solarUrl: (env.SOLAR_URL || '').replace(/\/$/, ''), // Solar-Dashboard: Standort und Strompreis von dort übernehmen
   pushContact: env.PUSH_CONTACT || 'mailto:mystrom-app@example.com',
 };
 
@@ -63,6 +62,7 @@ const q = {
 const meta = (k, fallback) => { const r = q.getMeta.get(k); return r ? JSON.parse(r.value) : fallback; };
 const setMeta = (k, v) => q.setMeta.run(k, JSON.stringify(v));
 let settings = { ...DEFAULT_SETTINGS, ...meta('settings', {}) };
+delete settings.priceFromSolar; // stammte aus dem früheren Abgleich mit dem Solar-Dashboard
 
 // ---------- Zeit in der Zeitzone des Hauses ----------
 const fmtDay = new Intl.DateTimeFormat('sv-SE', { timeZone: CFG.tz, year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -113,7 +113,7 @@ const DEFAULT_CFG = () => {
   };
 };
 // Eingaben nach dem Muster der Standardwerte prüfen: Zeit, Datum, Zahl, Ja/Nein, Text, Wochentage
-const LIMITS = { tcorr: [-10, 10], below: [0, 3000], mins: [1, 1440], max: [20, 90], onOffset: [-180, 180], offOffset: [-180, 180], hours: [1, 48] };
+const LIMITS = { price: [0, 5], lat: [-90, 90], lon: [-180, 180], tcorr: [-10, 10], below: [0, 3000], mins: [1, 1440], max: [20, 90], onOffset: [-180, 180], offOffset: [-180, 180], hours: [1, 48] };
 function clean(def, val, key = '') {
   if (val === undefined || val === null) return def;
   if (typeof def === 'boolean') return Boolean(val);
@@ -471,15 +471,19 @@ function notify(d, kind, title, body) {
   if (!CFG.demo) pushAll({ title, body, url: `./#dev/${d.mac}`, tag: `${kind}-${d.mac}` }).catch(() => {});
 }
 
-// ---------- Standort und Strompreis vom Solar-Dashboard ----------
-async function syncSolar() {
-  if (!CFG.solarUrl) return;
-  try {
-    const s = (await fetch(`${CFG.solarUrl}/api/settings`, { signal: AbortSignal.timeout(5000) }).then((r) => r.json())).settings || {};
-    const year = dayKey(Date.now()).slice(0, 4), price = s.tariffByYear?.[year] ?? s.tariffImport;
-    settings = { ...settings, ...(s.lat != null ? { lat: s.lat, lon: s.lon, place: s.location || '' } : {}), ...(price ? { price, priceFromSolar: true } : {}) };
-    setMeta('settings', settings);
-  } catch (e) { console.error('Solar-Dashboard:', e.message); }
+// ---------- Standort: Ortsname in Koordinaten umwandeln (Open-Meteo, zuerst in der Schweiz) ----------
+async function geocode(text) {
+  const m = text.match(/^\s*(-?\d{1,2}(?:\.\d+)?)\s*[,; ]\s*(-?\d{1,3}(?:\.\d+)?)\s*$/);
+  if (m) return { lat: Number(m[1]), lon: Number(m[2]), place: `${m[1]}, ${m[2]}` };
+  for (const cc of ['CH', null]) {
+    const u = new URL('https://geocoding-api.open-meteo.com/v1/search');
+    u.searchParams.set('name', text); u.searchParams.set('count', '1'); u.searchParams.set('language', 'de');
+    if (cc) u.searchParams.set('countryCode', cc);
+    const r = await fetch(u, { signal: AbortSignal.timeout(10000) });
+    const g = r.ok ? (await r.json())?.results?.[0] : null;
+    if (g) return { lat: g.latitude, lon: g.longitude, place: [g.name, g.admin1?.replace(/^Kanton /, ''), g.country_code !== 'CH' ? g.country : null].filter(Boolean).join(', ') };
+  }
+  throw new Error(`Ort „${text}“ nicht gefunden. Versuche einen anderen Ortsnamen oder Koordinaten wie 47.46, 8.19.`);
 }
 
 // ---------- HTTP ----------
@@ -542,8 +546,11 @@ const server = http.createServer(async (req, res) => {
     if (sm && req.method === 'POST') return json(await runScene(sm[1]));
     if (p === '/api/settings' && req.method === 'PUT') {
       const b = (await readBody(req)).settings || {};
-      settings = { ...settings, ...clean({ price: settings.price, lat: settings.lat, lon: settings.lon }, b) };
-      setMeta('settings', settings);
+      let next = { ...settings, ...clean({ price: settings.price, lat: settings.lat, lon: settings.lon }, b) };
+      if (typeof b.place === 'string' && b.place.trim()) {
+        try { next = { ...next, ...(await geocode(b.place.trim().slice(0, 80))) }; } catch (e) { return json({ error: e.name === 'TimeoutError' ? 'Die Ortssuche antwortet nicht.' : e.message }, 422); }
+      } else if (b.lat != null && b.lon != null) next.place = b.place ?? `${Number(b.lat).toFixed(2)}, ${Number(b.lon).toFixed(2)}`;
+      settings = next; setMeta('settings', settings);
       return json(settings);
     }
     if (p === '/api/push/key') return json({ key: vapidKeys().pub });
@@ -593,7 +600,6 @@ if (CFG.demo && !devices.size) {
 server.listen(CFG.port, () => console.log(`myStrom-App läuft auf http://0.0.0.0:${CFG.port}${CFG.demo ? ' (Demo)' : ''}, ${devices.size} Geräte bekannt`));
 for (const ip of CFG.hosts) addByIp(ip).then(pollDevice).catch((e) => console.error('Gerät', ip, e.message));
 discover();
-await syncSolar(); setInterval(syncSolar, 6 * 3600e3);
 await pollAll().catch((e) => console.error('Messen:', e.message));
 setInterval(() => pollAll().catch((e) => console.error('Messen:', e.message)), CFG.pollMs);
 setInterval(() => q.pruneEvents.run(Date.now() - 400 * 864e5), 24 * 3600e3);

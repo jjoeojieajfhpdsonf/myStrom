@@ -183,7 +183,7 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .tile.devtgl { color: inherit; }
 .knob { transition: transform .28s cubic-bezier(.3,.7,.3,1), fill .28s; }
 /* Zeitraum Tag/Woche/Monat/Jahr */
-.periods { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; margin: 10px 16px 0; background: #2a2a2a; border-radius: 9px; padding: 2px; }
+.periods { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; /* 3 oder 4 Knöpfe, immer volle Breite */ gap: 2px; margin: 10px 16px 0; background: #2a2a2a; border-radius: 9px; padding: 2px; }
 .periods button { padding: 7px 0; border-radius: 7px; font-size: 14px; min-height: 34px; }
 .periods button[aria-pressed="true"] { background: var(--acc); color: #fff; font-weight: 600; }
 /* Startseite anordnen */

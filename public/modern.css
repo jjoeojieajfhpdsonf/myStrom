@@ -86,7 +86,8 @@ html.scrolled .hd, .page-copy.scrolled .hd { background: rgb(19 25 32 / .94); -w
 .big b small { font-size: 18px; letter-spacing: 0; color: var(--mut); }
 .periods { margin: 14px 0 0; background: rgb(255 255 255 / .06); border-radius: 12px; padding: 3px; }
 .periods button { border-radius: 9px; color: var(--mut); }
-.periods button[aria-pressed="true"] { background: var(--tile2); color: var(--fg); box-shadow: 0 1px 3px rgb(0 0 0 / .4); }
+/* gewählt heller als die Leiste (vorher dunkler: wirkte vertauscht) */
+.periods button[aria-pressed="true"] { background: rgb(255 255 255 / .12); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .35), inset 0 1px 0 rgb(255 255 255 / .06); }
 .nav { padding: 14px 0 8px; }
 .nav .devsel { border: 0; background: rgb(255 255 255 / .07); border-radius: 999px; padding: 6px 14px; font-weight: 500; }
 .nav .arr { border: 0; background: rgb(255 255 255 / .07); border-radius: 50%; }

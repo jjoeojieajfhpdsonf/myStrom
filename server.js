@@ -390,7 +390,13 @@ function statusText(d) {
   if (c.vacation.on && today < c.vacation.from) return `Aus · Ferien ab ${dShort(c.vacation.from)}`;
   return 'Aus';
 }
-const sinceWh = (mac, ts) => (mac === 'all' ? q.sumWhAll.get(ts).wh : q.sumWh.get(mac, ts).wh);
+// mac: 'all', ein Gerät oder mehrere mit Komma (A,B) – dann die Summe der gewählten
+const macsOf = (mac) => (mac === 'all' ? null : mac.split(','));
+const validMac = (mac) => mac === 'all' || (!!mac && mac.split(',').every((m) => devices.has(m)));
+const sumOver = (mac, all, one) => (mac === 'all' ? all() : macsOf(mac).reduce((a, m) => a + one(m), 0));
+const rowsOf = (mac, from, to) => (mac === 'all' ? q.samplesAll.all(from, to)
+  : macsOf(mac).flatMap((m) => q.samples.all(m, from, to).map((s) => ({ ...s, mac: m }))).sort((x, y) => x.ts - y.ts));
+const sinceWh = (mac, ts) => sumOver(mac, () => q.sumWhAll.get(ts).wh, (m) => q.sumWh.get(m, ts).wh);
 function deviceJson(d) {
   const r = R(d.mac), today = dayKey(Date.now());
   return {
@@ -410,11 +416,11 @@ function apiState() {
 // Tagesverlauf in 5-Minuten-Schritten (Mittelwert W), dazu Summe und Spitze
 function apiCurve(mac, day) {
   const from = dayStart(day), to = dayStart(addDays(day, 1)), n = Math.round((to - from) / 300e3);
-  const rows = mac === 'all' ? q.samplesAll.all(from, to) : q.samples.all(mac, from, to);
+  const rows = rowsOf(mac, from, to);
   const per = new Map(); // je Gerät und Fenster: Summe, Anzahl
   let wh = 0;
   for (const s of rows) {
-    const i = Math.floor((s.ts - from) / 300e3), k = `${s.mac || mac}|${i}`, a = per.get(k) || [0, 0];
+    const i = Math.floor((s.ts - from) / 300e3), k = `${s.mac}|${i}`, a = per.get(k) || [0, 0];
     a[0] += s.w; a[1]++; per.set(k, a); wh += s.wh || 0;
   }
   const w = Array(n).fill(null);
@@ -426,7 +432,7 @@ function apiTotals(mac) {
   const now = Date.now(), today = dayKey(now), d = new Date(`${today}T12:00:00Z`);
   const monthStart = dayStart(`${today.slice(0, 7)}-01`), yearStart = dayStart(`${today.slice(0, 4)}-01-01`);
   const wd = (d.getUTCDay() + 6) % 7, weekStart = dayStart(addDays(today, -wd));
-  const first = mac === 'all' ? null : q.firstTs.get(mac).ts;
+  const firsts = mac === 'all' ? [] : macsOf(mac).map((m) => q.firstTs.get(m).ts).filter(Boolean), first = firsts.length ? Math.min(...firsts) : null;
   return { today: sinceWh(mac, dayStart(today)), week: sinceWh(mac, weekStart), month: sinceWh(mac, monthStart), year: sinceWh(mac, yearStart), all: sinceWh(mac, 0), since: first };
 }
 function apiBars(mac, period, ref) {
@@ -443,13 +449,13 @@ function apiBars(mac, period, ref) {
     buckets = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'].map((label, i) => ({ key: `${y}-${pad(i + 1)}`, label,
       from: dayStart(`${y}-${pad(i + 1)}-01`), to: dayStart(i === 11 ? `${y + 1}-01-01` : `${y}-${pad(i + 2)}-01`) }));
   }
-  const bars = buckets.map((b) => ({ key: b.key, label: b.label, wh: b.from > now ? null : (mac === 'all' ? q.sumBetweenAll.get(b.from, b.to) : q.sumBetween.get(mac, b.from, b.to)).wh }));
+  const bars = buckets.map((b) => ({ key: b.key, label: b.label, wh: b.from > now ? null : sumOver(mac, () => q.sumBetweenAll.get(b.from, b.to).wh, (m) => q.sumBetween.get(m, b.from, b.to).wh) }));
   return { period, ref, bars, wh: bars.reduce((a, b) => a + (b.wh || 0), 0) };
 }
 // CSV: Rohdaten (alle 30 s) oder zusammengefasst je 5 Minuten, Stunde oder Tag (Mittelwert Leistung, Summe Energie)
 function csvExport(mac, from, to, res = 'raw') {
   const a = dayStart(from), b = dayStart(addDays(to, 1));
-  const rows = mac === 'all' ? q.samplesAll.all(a, b) : q.samples.all(mac, a, b).map((s) => ({ ...s, mac }));
+  const rows = rowsOf(mac, a, b);
   const names = Object.fromEntries([...devices.values()].map((d) => [d.mac, nameOf(d)]));
   const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: CFG.tz, timeStyle: 'medium', hourCycle: 'h23' });
   const when = (ts) => `${dayKey(ts)} ${fmt.format(ts)}`;
@@ -612,20 +618,20 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/curve') {
       const mac = sp.get('mac') || 'all', day = sp.get('day') || dayKey(Date.now());
-      if (!isDay(day) || (mac !== 'all' && !devices.has(mac))) return json({ error: 'mac und day (JJJJ-MM-TT) angeben' }, 400);
+      if (!isDay(day) || !validMac(mac)) return json({ error: 'mac und day (JJJJ-MM-TT) angeben' }, 400);
       return json(apiCurve(mac, day));
     }
     if (p === '/api/bars') {
       const mac = sp.get('mac') || 'all', period = sp.get('period'), ref = sp.get('ref') || dayKey(Date.now());
-      if (!['week', 'month', 'year'].includes(period) || !isDay(ref) || (mac !== 'all' && !devices.has(mac))) return json({ error: 'period (week|month|year), ref (JJJJ-MM-TT) und mac angeben' }, 400);
+      if (!['week', 'month', 'year'].includes(period) || !isDay(ref) || !validMac(mac)) return json({ error: 'period (week|month|year), ref (JJJJ-MM-TT) und mac angeben' }, 400);
       return json(apiBars(mac, period, ref));
     }
-    if (p === '/api/totals') { const mac = sp.get('mac') || 'all'; return json(apiTotals(mac)); }
+    if (p === '/api/totals') { const mac = sp.get('mac') || 'all'; if (!validMac(mac)) return json({ error: 'unbekanntes Gerät' }, 400); return json(apiTotals(mac)); }
     if (p === '/api/events') { const mac = sp.get('mac'); return json(q.events.all(mac, mac, Math.min(200, Number(sp.get('n') || 50)))); }
     if (p === '/api/export.csv') {
       const mac = sp.get('mac') || 'all', from = sp.get('from'), to = sp.get('to'), step = ['raw', '5min', 'hour', 'day'].includes(sp.get('res')) ? sp.get('res') : 'raw';
-      if (!isDay(from) || !isDay(to)) return json({ error: 'from und to als JJJJ-MM-TT angeben' }, 400);
-      const name = mac === 'all' ? 'alle' : nameOf(devices.get(mac) || { cfg: {}, mac }).replace(/[^\w-]+/g, '_');
+      if (!isDay(from) || !isDay(to) || !validMac(mac)) return json({ error: 'from und to als JJJJ-MM-TT und bekannte Geräte angeben' }, 400);
+      const name = mac === 'all' ? 'alle' : macsOf(mac).map((m) => nameOf(devices.get(m))).join('+').replace(/[^\w+-]+/g, '_');
       res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="steckdosen-${name}-${from}-${to}-${step === 'raw' ? '30s' : step}.csv"` });
       return res.end(`\ufeff${csvExport(mac, from, to, step)}`);
     }

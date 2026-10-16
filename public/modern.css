@@ -3,6 +3,9 @@
 :root {
   --bg: #0b0d10; --bg2: #101318; --tile: #171b21; --tile2: #1c2128; --list: #161a20; --line: rgb(255 255 255 / .06);
   --fg: #eef1f4; --mut: #8b939e; --acc: #63d11a; --acc2: #3f9e05; --red: #ff5a4e;
+  /* eingeschaltete Kacheln: dezente Tönung, gedämpfter Rahmen, Symbol und Temperatur */
+  --on-a: rgb(99 209 26 / .075); --on-b: rgb(99 209 26 / .025); --on-line: rgb(99 209 26 / .32); --on-ico: #8cc865;
+  --on-chip: rgb(99 209 26 / .09); --on-chiptxt: #a6d488;
   --r: 22px; --r-s: 14px; --gap: 10px;
   --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   color-scheme: dark;
@@ -45,9 +48,8 @@ main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: m
 .hint { padding-top: 14px; }
 
 /* Raum, Symbol, Gerät wählen */
-.tile.room.sel { background: #0f1216; box-shadow: inset 0 0 0 2px var(--acc); }
-.tile.room.sel .lb { color: var(--mut); }
-.tile.room .chk { border-color: var(--acc); color: #0b1a02; background: var(--acc); width: 34px; height: 34px; }
+.tile.room.sel { box-shadow: inset 0 0 0 1.5px rgb(238 241 244 / .7); }
+.tile.room .chk { left: 12px; top: 12px; width: 24px; height: 24px; color: var(--bg); background: var(--fg); }
 .tile.room .new { width: 56px; height: 24px; right: 10px; bottom: 10px; background: rgb(99 209 26 / .16); border-radius: 999px; }
 .tile.room .new i { position: static; transform: none; display: grid; place-items: center; height: 100%; color: #9fe36a; font-size: 11px; font-weight: 600; letter-spacing: .03em; }
 
@@ -111,13 +113,23 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline-color: var(
 @media (min-width: 700px) { .grid { grid-template-columns: repeat(3, 1fr); } }
 
 /* Schalter-Kachel der Geräteseite (an): Rahmen und leichte grüne Tönung statt voller Fläche, Steckdose und LED grün */
-.tile.devtgl.on { background: linear-gradient(160deg, rgb(99 209 26 / .16), rgb(99 209 26 / .07)); color: var(--fg); box-shadow: inset 0 0 0 1.5px rgb(99 209 26 / .75); }
-.tile.devtgl.on .ico { color: var(--acc); } .tile.devtgl.on .lb { color: var(--fg); }
-.tile.devtgl .led.on { stroke: var(--acc); } .tile.devtgl .led.off-line { stroke: #5b626b; }
+.tile.devtgl.on { background: linear-gradient(160deg, var(--on-a), var(--on-b)); color: var(--fg); box-shadow: inset 0 0 0 1.5px var(--on-line); }
+.tile.devtgl.on .ico { color: var(--on-ico); } .tile.devtgl.on .lb { color: var(--fg); }
+.tile.devtgl .led.on { stroke: var(--on-ico); } .tile.devtgl .led.off-line { stroke: #5b626b; }
 /* Steckdosen auf der Startseite (an) wie die Schalter-Kachel der Geräteseite: Rahmen und leichte grüne Tönung statt voller Fläche */
-.tile.dev.on .face { background: linear-gradient(160deg, rgb(99 209 26 / .16), rgb(99 209 26 / .07)), linear-gradient(160deg, var(--tile2), var(--tile)); color: var(--fg);
-  box-shadow: inset 0 0 0 1.5px rgb(99 209 26 / .75); }
-.tile.dev.on .face .ico { color: var(--acc); }
+.tile.dev.on .face { background: linear-gradient(160deg, var(--on-a), var(--on-b)), linear-gradient(160deg, var(--tile2), var(--tile)); color: var(--fg);
+  box-shadow: inset 0 0 0 1.5px var(--on-line); }
+.tile.dev.on .face .ico { color: var(--on-ico); }
 .tile.dev.on .face .sub { color: var(--mut); }
 .grid.home .tile.dev.on .lb { color: var(--fg); }
-.tile.dev.on .tmp { background: rgb(99 209 26 / .14); color: #b9ec97; }
+.tile.dev.on .tmp { background: var(--on-chip); color: var(--on-chiptxt); }
+/* Gerät wählen (Verbrauch): an = Tönung und grüner Rahmen wie auf der Startseite; ausgewählt = heller Rahmen und Häkchen;
+   Schrift immer hell (vorher: ausgewählt und an zusammen ergab dunkle Schrift auf dunkler Fläche) */
+.pick .tile.room.on { background: linear-gradient(160deg, var(--on-a), var(--on-b)), linear-gradient(160deg, var(--tile2), var(--tile)); color: var(--fg); box-shadow: inset 0 0 0 1.5px var(--on-line); }
+.pick .tile.room.on .ico { color: var(--on-ico); }
+.pick .tile.room .lb, .pick .tile.room.on .lb, .pick .tile.room.sel .lb { color: var(--fg); }
+.pick .tile.room .sub, .pick .tile.room.on .sub, .pick .tile.room.sel .sub { color: var(--mut); }
+.pick .tile.room .tmp, .pick .tile.room.sel .tmp { color: #cfd5dc; background: rgb(255 255 255 / .08); }
+.pick .tile.room.on .tmp { color: var(--on-chiptxt); background: var(--on-chip); }
+.pick .tile.room.sel { box-shadow: inset 0 0 0 1.5px rgb(238 241 244 / .7); }
+.pick .tile.room.sel:not(.on) { background: linear-gradient(160deg, var(--tile2), var(--tile)); }

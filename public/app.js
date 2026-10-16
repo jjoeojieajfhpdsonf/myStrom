@@ -475,13 +475,16 @@ function featureHTML(d, k, sub) {
       <div class="ls">${lrow('Name', '<input type="text" data-roomnew="1" placeholder="z. B. Werkstatt" maxlength="40" enterkeyhint="done" autocomplete="off" style="background:#2a2a2a;color:var(--fg);padding:7px 9px;text-align:left;max-width:200px">')}</div>
       <button type="button" class="btn" data-roomadd="1">Hinzufügen</button>`;
     case 'tech': return head + `<div class="ls">${[['Typ', d.typeName], ['Firmware', d.fw || '–'], ['IP-Adresse', d.ip], ['MAC', d.mac.match(/../g).join(':')], ['Verbindung', d.online ? 'erreichbar' : 'offline'],
-      ['Temperatur gemessen', d.tempRaw != null ? `${d.tempRaw.toFixed(1)} °C` : '–'], ['Cloud', 'nicht nötig, alles lokal']].map(([l, v]) => row(l, val(esc(v)))).join('')}</div>`;
+      ['Temperatur gemessen', d.tempRaw != null ? `${d.tempRaw.toFixed(1)} °C` : '–']].map(([l, v]) => row(l, val(esc(v)))).join('')}</div>`;
     default: return '';
   }
 }
 
 // ---------- Verbrauch: Diagramm wie in myStrom (Watt, Max-Linie, Uhrzeiten), Gerät und Tag wählbar ----------
 const view = { mac: 'all', day: null, period: 'day' };
+// view.mac: 'all', ein Gerät oder mehrere mit Komma
+const pickedMacs = (m) => (m === 'all' ? S.devices.map((d) => d.mac) : m.split(',').filter((x) => dev(x)));
+const pickedName = (m) => { if (m === 'all') return 'Alle Geräte'; const n = pickedMacs(m).map((x) => dev(x).name); return n.length > 2 ? `${n.length} Geräte` : n.join(' + '); };
 const PERIODS = [['day', 'Tag'], ['week', 'Woche'], ['month', 'Monat'], ['year', 'Jahr']];
 const MONTHS_LONG = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 function periodStart(p, day) {
@@ -569,12 +572,13 @@ function areaSVG(c) {
 function chartHTML(mac, pick) {
   view.day ||= S.today;
   if (!pick) view.mac = mac;
-  const m = pick ? view.mac : mac, d = m === 'all' ? null : dev(m);
-  const now = m === 'all' ? S.devices.reduce((a, x) => a + x.w, 0) : d.w, [v, u] = pwN(now);
+  if (pick && view.mac !== 'all' && !pickedMacs(view.mac).length) view.mac = 'all'; // gewähltes Gerät entfernt
+  const m = pick ? view.mac : mac;
+  const now = pickedMacs(m).reduce((a, x) => a + dev(x).w, 0), [v, u] = pwN(now);
   const p = view.period, ps = periodStart(p, view.day), current = periodStart(p, S.today) === ps, key = `${m}|${p}|${ps}`, live = current ? `|${Math.floor(S.now / 60e3)}` : '';
   return `<div class="big"><b>${v}<small> ${u}</small></b><span>Verbrauch jetzt</span></div>
     <div class="periods" role="group" aria-label="Zeitraum">${PERIODS.map(([k, l]) => `<button type="button" data-period="${k}" aria-pressed="${p === k}">${l}</button>`).join('')}</div>
-    <div class="nav"><button type="button" class="devsel" ${pick ? 'data-devsel="1"' : 'disabled'}>${esc(m === 'all' ? 'Alle Geräte' : d.name)}${pick ? ' ▾' : ''}</button>
+    <div class="nav"><button type="button" class="devsel" ${pick ? 'data-devsel="1"' : 'disabled'}>${esc(pickedName(m))}${pick ? ' ▾' : ''}</button>
       <span class="date">${periodLabel(p, view.day)}</span><button type="button" class="arr" data-dayshift="-1" aria-label="zurück">‹</button><button type="button" class="arr" data-dayshift="1" aria-label="vor" ${shiftPeriod(p, view.day, 1) > S.today ? 'disabled' : ''}>›</button></div>
     <div class="chart" data-chart="${key}" data-keep="${key}${live}"><div class="empty">Lädt …</div></div>
     <div class="foot" data-foot data-keep="${key}${live}"><div><b>–<small> kWh</small></b><span>Verbrauch</span></div><i></i><div><b>–<small> CHF</small></b><span>Kosten</span></div></div>`;
@@ -628,11 +632,12 @@ function chartTip(el, c) {
   const hide = () => { cur?.setAttribute('visibility', 'hidden'); tip?.remove(); tip = null; };
   svg.addEventListener('pointermove', show); svg.addEventListener('pointerdown', show); svg.addEventListener('pointerleave', hide);
 }
-// Gerät für den Verbrauch wählen: Overlay von unten mit Kacheln wie auf der Startseite, gewähltes abgedunkelt mit Häkchen
+// Geräte für den Verbrauch wählen: Overlay von unten mit Kacheln wie auf der Startseite; mehrere wählbar (Summe), gewählte mit Häkchen
 function devPickTiles() {
   const chk = '<span class="chk" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 12 4 4 8-8"/></svg></span>';
-  const t = (v, on, icon, label, sub, tmp = '') => `<button type="button" class="tile room ${on ? 'on' : ''} ${view.mac === v ? 'sel' : ''}" data-pickdev="${v}" aria-pressed="${view.mac === v}">
-    ${tmp}<span class="ico">${icon}${view.mac === v ? chk : ''}</span><span class="lb">${label}</span><span class="sub">${sub}</span></button>`;
+  const picked = view.mac === 'all' ? ['all'] : view.mac.split(',');
+  const t = (v, on, icon, label, sub, tmp = '') => { const sel = picked.includes(v); return `<button type="button" class="tile room ${on ? 'on' : ''} ${sel ? 'sel' : ''}" data-pickdev="${v}" aria-pressed="${sel}">
+    ${tmp}<span class="ico">${icon}${sel ? chk : ''}</span><span class="lb">${label}</span><span class="sub">${sub}</span></button>`; };
   const total = S.devices.reduce((a, d) => a + d.w, 0), totalWh = S.devices.reduce((a, d) => a + d.todayWh, 0);
   return `<div class="grid">
     ${t('all', false, I.bolt, `${pw(total)}<br>Alle Geräte`, `${kwh(totalWh)} kWh heute`)}
@@ -642,7 +647,7 @@ function devPickTiles() {
 function energyHTML() {
   const m = view.mac, month = (view.day || S.today).slice(0, 7);
   return HD('Verbrauch', 'home') + chartHTML(m, true) + totalsHTML(m)
-    + (m === 'all' && S.devices.length > 1 ? `<p class="sec">Heute je Gerät</p><div class="ls">${S.devices.map((d) => row(esc(d.name), chev(`${kwh(d.todayWh)} kWh`), '', `data-go="dev/${d.mac}/eval"`)).join('')}</div>` : '')
+    + (pickedMacs(m).length > 1 ? `<p class="sec">Heute je Gerät</p><div class="ls">${pickedMacs(m).map(dev).map((d) => row(esc(d.name), chev(`${kwh(d.todayWh)} kWh`), '', `data-go="dev/${d.mac}/eval"`)).join('')}</div>` : '')
     + `<button type="button" class="btn grey" data-go="export">Exportieren (CSV)</button>`;
 }
 // Export: Gerät, Zeitraum und Auflösung wählen, dann als CSV herunterladen (öffnet sich in Excel oder Numbers)
@@ -653,10 +658,10 @@ function exportHTML() {
   const ranges = [['Dieser Monat', `${S.today.slice(0, 7)}-01`, S.today], ['Letzter Monat', prev, lastOfMonth(prev.slice(0, 7))], ['Dieses Jahr', `${y}-01-01`, S.today], ['Alles', '2020-01-01', S.today]];
   const chip = (attr, v, l, on) => `<button type="button" class="chip" ${attr}="${esc(v)}" aria-pressed="${on}">${esc(l)}</button>`;
   const href = `api/export.csv?mac=${exp.mac}&from=${exp.from}&to=${exp.to}&res=${exp.res}`;
-  const days = Math.max(1, Math.round((Date.parse(exp.to) - Date.parse(exp.from)) / 864e5) + 1), n = exp.mac === 'all' ? S.devices.length : 1;
+  const days = Math.max(1, Math.round((Date.parse(exp.to) - Date.parse(exp.from)) / 864e5) + 1), n = pickedMacs(exp.mac).length;
   const rows = Math.round(days * n * { raw: 2880, '5min': 288, hour: 24, day: 1 }[exp.res]);
   return HD('Exportieren', 'energy') + `<p class="intro">Messwerte als CSV-Datei, z. B. für Excel oder Numbers.</p>
-    <p class="sec">Gerät</p><div class="chips">${chip('data-exp-mac', 'all', 'Alle Geräte', exp.mac === 'all')}${S.devices.map((d) => chip('data-exp-mac', d.mac, d.name, exp.mac === d.mac)).join('')}</div>
+    <p class="sec">Gerät</p><div class="chips">${chip('data-exp-mac', 'all', 'Alle Geräte', exp.mac === 'all')}${exp.mac.includes(',') ? chip('data-exp-mac', exp.mac, pickedName(exp.mac), true) : ''}${S.devices.map((d) => chip('data-exp-mac', d.mac, d.name, exp.mac === d.mac)).join('')}</div>
     <p class="sec">Zeitraum</p><div class="chips">${ranges.map(([l, a, b]) => chip('data-exp-range', `${a}|${b}`, l, exp.from === a && exp.to === b)).join('')}</div>
     <div class="ls">${lrow('Von', `<input type="date" data-exp-in="from" value="${exp.from}" max="${S.today}">`)}${lrow('Bis', `<input type="date" data-exp-in="to" value="${exp.to}" max="${S.today}">`)}</div>
     <p class="sec">Auflösung</p><div class="chips">${[['raw', 'alle 30 s'], ['5min', '5 Minuten'], ['hour', 'Stunde'], ['day', 'Tag']].map(([v, l]) => chip('data-exp-res', v, l, exp.res === v)).join('')}</div>
@@ -864,12 +869,19 @@ function openDevPick() {
   document.querySelector('.pick')?.remove();
   const el = document.createElement('div');
   el.className = 'pick';
-  el.innerHTML = `<div class="pick-bg" data-close></div><div class="pick-sheet" role="dialog" aria-label="Gerät wählen">
-    <div class="pick-hd"><b>Gerät wählen</b><button type="button" data-close>Fertig</button></div>${devPickTiles()}</div>`;
+  el.innerHTML = `<div class="pick-bg" data-close></div><div class="pick-sheet" role="dialog" aria-label="Geräte wählen">
+    <div class="pick-hd"><b>Geräte wählen</b><button type="button" data-close>Fertig</button></div>${devPickTiles()}</div>`;
   const close = () => { el.classList.remove('open'); setTimeout(() => el.remove(), 300); };
   el.addEventListener('click', (e) => {
     const o = e.target.closest('[data-pickdev]');
-    if (o) { haptic(); view.mac = o.dataset.pickdev; el.querySelector('.grid').outerHTML = devPickTiles(); render(); setTimeout(close, 180); }
+    if (o) {
+      haptic();
+      const v = o.dataset.pickdev, cur = view.mac === 'all' ? [] : view.mac.split(',');
+      const next = v === 'all' ? [] : cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
+      const ordered = S.devices.map((d) => d.mac).filter((x) => next.includes(x));
+      view.mac = !ordered.length || ordered.length === S.devices.length ? 'all' : ordered.join(',');
+      el.querySelector('.grid').outerHTML = devPickTiles(); render();
+    }
     else if (e.target.closest('[data-close]')) close();
   });
   document.body.append(el);

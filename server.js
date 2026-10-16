@@ -83,7 +83,6 @@ function dayStart(day) {
   return Date.parse(`${day}T00:00:00Z`) - off * 60e3;
 }
 const dShort = (day) => { const [, m, d] = day.split('-').map(Number); return `${d}.${m}.`; };
-const inWindow = (m, from, to) => { const a = hm2min(from), b = hm2min(to); return a <= b ? m >= a && m < b : m >= a || m < b; };
 const pw = (w) => (w < 1000 ? `${Math.round(w)} W` : `${(w / 1000).toFixed(2)} kW`);
 const hash01 = (s) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return (h >>> 0) / 4294967296; };
 
@@ -106,8 +105,8 @@ const DEFAULT_CFG = () => {
     name: '', room: '', icon: '', tcorr: 0, lock: false,
     actions: [], // Power Actions: wenn über/unter X W, dann …
     // mehrere Zeitpläne mit eigenen Zeiten; jeder Wochentag (0 = So … 6 = Sa) gehört höchstens zu einem
-    schedule: { on: false, entries: [{ id: 's1', start: '07:00', end: '23:00', days: [1, 2, 3, 4, 5, 6, 0] }] },
-    idle: { on: false, from: '23:00', to: '07:00', below: 25, mins: 10, backOn: true }, // nachts aus, wenn nicht mehr benutzt
+    // idle: erst aus, wenn nicht mehr benutzt (unter below W für mins Minuten), statt genau um „Aus um“
+    schedule: { on: false, entries: [{ id: 's1', start: '07:00', end: '23:00', days: [1, 2, 3, 4, 5, 6, 0], idle: false, below: 25, mins: 10 }] },
     temp: { on: false, max: 45 },
     sun: { on: false, off: false, onOffset: 0, offOffset: 0 },
     vacation: { on: false, from: today, to: addDays(today, 7), morning: { on: true, from: '06:30', to: '07:30' }, evening: { on: true, from: '19:00', to: '22:30' } },
@@ -139,7 +138,9 @@ function cleanSchedule(v) {
   const entries = raw.slice(0, 7).map((e, i) => {
     const days = [...new Set((Array.isArray(e.days) ? e.days : [1, 2, 3, 4, 5, 6, 0]).map(Number))].filter((x) => Number.isInteger(x) && x >= 0 && x <= 6 && !used.has(x));
     days.forEach((x) => used.add(x));
-    return { id: /^[\w-]{1,16}$/.test(e.id) ? e.id : `s${i + 1}`, start: hm(e.start, '07:00'), end: hm(e.end, '23:00'), days };
+    const num = (x, lo, hi, d) => (Number.isFinite(Number(x)) ? Math.min(hi, Math.max(lo, Number(x))) : d);
+    return { id: /^[\w-]{1,16}$/.test(e.id) ? e.id : `s${i + 1}`, start: hm(e.start, '07:00'), end: hm(e.end, '23:00'), days,
+      idle: Boolean(e.idle), below: num(e.below, 0, 3000, 25), mins: Math.round(num(e.mins, 1, 240, 10)) };
   });
   return { on: Boolean(v.on), entries };
 }
@@ -164,7 +165,16 @@ const merge = (a, b) => (isObj(a) && isObj(b) ? Object.fromEntries([...new Set([
 
 // ---------- Geräte ----------
 const devices = new Map(); // mac -> { mac, ip, type, fw, cfg, added }
-for (const r of q.devices.all()) devices.set(r.mac, { ...r, cfg: clean(DEFAULT_CFG(), JSON.parse(r.cfg || '{}')) });
+// frühere Funktion „Nachts aus“ (eigenes Zeitfenster) wird zum Zeitplan mit „erst aus, wenn nicht mehr benutzt“
+function migrateIdle(c) {
+  const i = c.idle; delete c.idle;
+  if (!i?.on) return c;
+  const old = c.schedule || {}, extra = { idle: true, below: i.below ?? 25, mins: i.mins ?? 10 };
+  if (old.on) old.entries = (old.entries || (old.start ? [{ id: 's1', start: old.start, end: old.end, days: old.days }] : [])).map((e) => ({ ...e, ...extra }));
+  else Object.assign(old, { on: true, entries: [{ id: 's1', start: i.to || '07:00', end: i.from || '23:00', days: [1, 2, 3, 4, 5, 6, 0], ...extra }] });
+  c.schedule = old; return c;
+}
+for (const r of q.devices.all()) devices.set(r.mac, { ...r, cfg: clean(DEFAULT_CFG(), migrateIdle(JSON.parse(r.cfg || '{}'))) });
 const saveDevice = (d) => q.putDevice.run(d.mac, d.ip, d.type, d.fw, JSON.stringify(d.cfg), d.added);
 const nameOf = (d) => d.cfg.name || `Steckdose ${d.mac.slice(-4)}`;
 // Laufzustand (nicht gespeichert): Messwerte, Verbindungsfehler, Zähler der Regeln
@@ -307,6 +317,22 @@ function usualMax(mac) {
   }
   return p99Cache.v[mac];
 }
+// Zeitplan mit „erst aus, wenn nicht mehr benutzt“: gilt von „Aus um“ bis zum nächsten „Ein um“, höchstens 12 Stunden.
+// Ohne gespeicherten Zustand berechnet, damit ein Neustart des Servers nichts verliert.
+function idleWatch(c, now) {
+  if (!c.schedule.on || !c.schedule.entries.some((e) => e.idle)) return null;
+  const today = dayKey(now), at = (day, hm) => dayStart(day) + hm2min(hm) * 60e3;
+  const entryOf = (day) => c.schedule.entries.find((e) => e.days.includes(weekday(dayStart(day) + 12 * 3600e3)));
+  const ons = [];
+  for (let k = -2; k <= 8; k++) { const day = addDays(today, k), e = entryOf(day); if (e) ons.push(at(day, e.start)); }
+  for (let k = -2; k <= 0; k++) {
+    const day = addDays(today, k), e = entryOf(day);
+    if (!e?.idle) continue;
+    const off = at(hm2min(e.end) <= hm2min(e.start) ? addDays(day, 1) : day, e.end), next = Math.min(...ons.filter((x) => x > off), off + 12 * 3600e3);
+    if (now >= off && now < next) return e;
+  }
+  return null;
+}
 async function runRules(d, prev, now) {
   const c = d.cfg, r = R(d.mac), m = minOfDay(now), day = dayKey(now), crossed = crossedFn(prev, now);
   if (!r.online) return;
@@ -315,18 +341,14 @@ async function runRules(d, prev, now) {
   const t = c.schedule.on && c.schedule.entries.find((e) => e.days.includes(weekday(now)));
   if (t) {
     if (crossed(hm2min(t.start))) await sw(true, 'Zeitplan');
-    if (crossed(hm2min(t.end))) await sw(false, 'Zeitplan');
+    if (!t.idle && crossed(hm2min(t.end))) await sw(false, 'Zeitplan');
   }
-  // Nachts aus, wenn nicht mehr benutzt: im Zeitfenster abschalten, sobald die Leistung lange genug unter der Schwelle bleibt
-  if (c.idle.on) {
-    if (r.relay && inWindow(m, c.idle.from, c.idle.to)) {
-      if (r.w < c.idle.below) {
-        r.lowSince ||= now;
-        if (now - r.lowSince >= c.idle.mins * 60e3) { await sw(false, 'nicht mehr benutzt'); r.offBy = 'idle'; }
-      } else r.lowSince = null;
-    } else r.lowSince = null;
-    if (c.idle.backOn && crossed(hm2min(c.idle.to)) && r.offBy === 'idle') await sw(true, 'morgens wieder an');
-  }
+  // „erst aus, wenn nicht mehr benutzt“: ab „Aus um“ abschalten, sobald die Leistung lange genug unter der Schwelle bleibt
+  const w = idleWatch(c, now);
+  if (w && r.relay && r.w < w.below) {
+    r.lowSince ||= now;
+    if (now - r.lowSince >= w.mins * 60e3) await sw(false, 'nicht mehr benutzt');
+  } else r.lowSince = null;
   // Temperatur
   const temp = r.temp == null ? null : r.temp + c.tcorr;
   if (c.temp.on && r.relay && temp != null && temp > c.temp.max) { await sw(false, `zu warm (${temp.toFixed(1)} °C)`); }
@@ -392,8 +414,9 @@ async function runAction(d, a) {
 function statusText(d) {
   const r = R(d.mac), c = d.cfg, now = Date.now(), m = minOfDay(now);
   if (!r.online) return r.seen ? `Offline seit ${clock(r.seen)}` : 'Wird verbunden …';
-  if (r.relay && c.idle.on && inWindow(m, c.idle.from, c.idle.to)) {
-    if (r.lowSince) return `Unter ${c.idle.below} W · aus in ${Math.max(1, Math.ceil(c.idle.mins - (now - r.lowSince) / 60e3))} min`;
+  const iw = r.relay && idleWatch(c, now);
+  if (iw) {
+    if (r.lowSince) return `Unter ${iw.below} W · aus in ${Math.max(1, Math.ceil(iw.mins - (now - r.lowSince) / 60e3))} min`;
     return `${pw(r.w)} · wartet, du arbeitest noch`;
   }
   if (r.relay && c.timer.on && r.onSince) return `${pw(r.w)} · Timer, aus um ${clock(r.onSince + c.timer.mins * 60e3)}`;
@@ -699,7 +722,7 @@ if (CFG.demo && !devices.size) {
   const names = [['DEMO00000001', 'Schreibtisch', 'Büro'], ['DEMO00000002', 'Magic Mirror', 'Schlafzimmer'], ['DEMO00000003', 'Lampe', 'Wohnzimmer']];
   for (const [mac, name, room] of names) {
     const cfg = { ...DEFAULT_CFG(), name, room };
-    if (mac.endsWith('1')) cfg.idle.on = true;
+    if (mac.endsWith('1')) cfg.schedule = { on: true, entries: [{ id: 's1', start: '07:00', end: '23:00', days: [1, 2, 3, 4, 5, 6, 0], idle: true, below: 25, mins: 10 }] };
     if (mac.endsWith('2')) cfg.schedule = { on: true, entries: [{ id: 's1', start: '06:30', end: '23:00', days: [1, 2, 3, 4, 5] }, { id: 's2', start: '08:30', end: '23:30', days: [6, 0] }] };
     if (mac.endsWith('3')) cfg.vacation.on = true;
     const d = { mac, ip: `demo-${mac.slice(-1)}`, type: 106, fw: '4.0.14', cfg, added: Date.now() };

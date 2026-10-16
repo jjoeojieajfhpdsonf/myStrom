@@ -41,11 +41,11 @@ const I = {
 
 // Funktionen pro Steckdose: Schlüssel = Block in den Einstellungen
 const FEAT = [
-  ['schedule', 'clock', 'Zeitplan'], ['idle', 'idle', 'Nachts aus'], ['actions', 'pact', 'Power Actions'], ['vacation', 'beach', 'Ferien'],
+  ['schedule', 'clock', 'Zeitplan'], ['actions', 'pact', 'Power Actions'], ['vacation', 'beach', 'Ferien'],
   ['sun', 'sun', 'Sonne'], ['timer', 'timer', 'Timer'], ['saver', 'leaf', 'Stromsparen'],
   ['temp', 'temp', 'Temperatur'], ['alarms', 'bell', 'Alarme'], ['eval', 'evals', 'Auswertung'],
 ];
-const FTITLE = { schedule: 'Zeitplan', idle: 'Nachts aus', vacation: 'Ferienmodus', sun: 'Sonne', timer: 'Timer', saver: 'Stromsparen',
+const FTITLE = { schedule: 'Zeitplan', vacation: 'Ferienmodus', sun: 'Sonne', timer: 'Timer', saver: 'Stromsparen',
   temp: 'Temperatur', alarms: 'Alarme', eval: 'Auswertung', settings: 'Einstellungen', tech: 'Technische Details', room: 'Raum wählen', roomnew: 'Eigener Raum', icon: 'Symbol wählen', actions: 'Power Actions' };
 const RI = (d) => `<svg viewBox="0 0 64 64" width="58" height="58" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">${d}</svg>`;
 const ROOM_ICON = {
@@ -122,8 +122,7 @@ function daysText(days) {
 function featInfo(d, k) {
   const c = d.cfg;
   switch (k) {
-    case 'schedule': { const e = c.schedule.entries; return [c.schedule.on, e.length === 1 ? `${e[0].start}–${e[0].end} · ${daysText(e[0].days)}` : `${e.length} Zeitpläne · ${daysText(e.flatMap((x) => x.days))}`]; }
-    case 'idle': return [c.idle.on, `ab ${c.idle.from}, unter ${c.idle.below} W`];
+    case 'schedule': { const e = c.schedule.entries; return [c.schedule.on, e.length === 1 ? `${e[0].start}–${e[0].end}${e[0].idle ? ' oder später' : ` · ${daysText(e[0].days)}`}` : `${e.length} Zeitpläne · ${daysText(e.flatMap((x) => x.days))}`]; }
     case 'vacation': return [c.vacation.on, `${dShort(c.vacation.from)}–${dShort(c.vacation.to)}`];
     case 'sun': return [c.sun.on || c.sun.off, [c.sun.on && 'abends an', c.sun.off && 'morgens aus'].filter(Boolean).join(', ')];
     case 'timer': return [c.timer.on, `nach ${c.timer.mins < 60 ? `${c.timer.mins} min` : `${c.timer.mins / 60} h`} aus`];
@@ -188,7 +187,7 @@ async function switchDev(mac, on) {
 }
 const shake = (el) => el?.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(-3px)' }, { transform: 'none' }], 260);
 
-// ---------- Navigation über den Hash (#dev/MAC/idle), damit Zurück und Mitteilungen funktionieren ----------
+// ---------- Navigation über den Hash (#dev/MAC/timer), damit Zurück und Mitteilungen funktionieren ----------
 const cur = () => location.hash.slice(1) || 'home';
 const route = () => cur().split('/');
 const depth = (h) => (h === 'home' ? 0 : h.split('/').length);
@@ -302,7 +301,9 @@ const stpParse = (list, raw) => {
 };
 const stpSave = (path, v) => {
   const [, r1, , id] = route();
-  if (path.startsWith('a:')) updAct(r1, id, { [path.slice(2)]: v }); else saveCfg(r1, patchOf(path, v));
+  if (path.startsWith('a:')) updAct(r1, id, { [path.slice(2)]: v });
+  else if (path.startsWith('sch:')) { const [, sid, k] = path.split(':'); updSch(r1, (e) => (e.id === sid ? { ...e, [k]: v } : e)); }
+  else saveCfg(r1, patchOf(path, v));
 };
 const nextStep = (list, v, dir) => { const vals = STEPS[list][0]; return dir > 0 ? vals.find((x) => x > v) ?? vals[vals.length - 1] : [...vals].reverse().find((x) => x < v) ?? vals[0]; };
 const val = (t) => `<span class="val">${t}</span>`;
@@ -438,19 +439,15 @@ function featureHTML(d, k, sub) {
       // je Zeitplan: Ein, Aus, Tage. Tage eines anderen Zeitplans sind hier nicht wählbar (jeder Tag nur einmal)
       const s = c.schedule, taken = (id) => s.entries.filter((e) => e.id !== id).flatMap((e) => e.days), free = WD.filter(([n]) => !s.entries.some((e) => e.days.includes(n)));
       return head + `<p class="intro">Schaltet zu festen Zeiten ein und aus. Für andere Tage mit anderen Zeiten fügst du einen weiteren Zeitplan hinzu.</p>
+      ${s.on && /wartet|aus in/.test(d.status) ? `<p class="note"><b>Jetzt:</b> ${esc(d.status)}</p>` : ''}
       <div class="${dim(s.on)}">${master(d, 'schedule')}</div>
       ${s.entries.map((e, i) => `<div class="schd-hd"><p class="sec">${s.entries.length > 1 ? `Zeitplan ${i + 1} · ` : ''}${daysText(e.days)}</p>${s.entries.length > 1 ? `<button type="button" class="tlink" data-schdel="${e.id}">Entfernen</button>` : ''}</div>
-        <div class="${dim(s.on)}">${lrow('Ein um', `<input type="time" data-schin="${e.id}|start" value="${e.start}">`)}${lrow('Aus um', `<input type="time" data-schin="${e.id}|end" value="${e.end}">`)}</div>
+        <div class="${dim(s.on)}">${lrow('Ein um', `<input type="time" data-schin="${e.id}|start" value="${e.start}">`)}${lrow(e.idle ? 'Aus ab' : 'Aus um', `<input type="time" data-schin="${e.id}|end" value="${e.end}">`)}
+          <div class="row"><span class="tx"><b>Erst aus, wenn nicht mehr benutzt</b><span>wartet, solange du noch dran arbeitest</span></span><button type="button" class="sw" data-schsw="${e.id}" aria-pressed="${e.idle}" aria-label="Erst aus, wenn nicht mehr benutzt"></button></div>
+          ${e.idle ? `${srow('Unter', stepper(`sch:${e.id}:below`, 'watt1', e.below, 'Unter'), 'jetzt ' + pw(d.w))}${srow('So lange', stepper(`sch:${e.id}:mins`, 'dur240', e.mins, 'So lange'), 'am Stück')}` : ''}</div>
         <div class="chips days">${WD.filter(([n]) => !taken(e.id).includes(n)).map(([n, l]) => `<button type="button" class="chip" data-schday="${e.id}|${n}" aria-pressed="${e.days.includes(n)}">${l}</button>`).join('')}</div>`).join('')}
       ${free.length ? `<button type="button" class="btn ghost" data-schadd="1">＋ Zeitplan hinzufügen</button>` : ''}`;
     }
-    case 'idle': return head + `<p class="intro">Im Zeitfenster schaltet die Steckdose ab, sobald so wenig Strom fliesst, dass niemand mehr dran arbeitet. Arbeitest du noch (PC und Bildschirm ziehen mehr), wartet sie.</p>
-      <div class="${dim(c.idle.on)}">${master(d, 'idle')}${lrow('Ab', inp('idle.from', 'time', c.idle.from))}${lrow('Bis', inp('idle.to', 'time', c.idle.to))}
-        ${srow('Aus unter', stepper('idle.below', 'watt1', c.idle.below, 'Aus unter'), 'jetzt ' + pw(d.w))}
-        ${srow('Wenn so lange', stepper('idle.mins', 'dur240', c.idle.mins, 'Wenn so lange'), 'am Stück')}
-        <div class="row"><span class="tx"><b>Um ${c.idle.to} wieder an</b><span>nur wenn diese Regel ausgeschaltet hat</span></span>${sw('idle.backOn', c.idle.backOn, 'Morgens wieder an')}</div></div>
-      ${c.idle.on ? `<p class="note"><b>Jetzt:</b> ${esc(d.status)}</p>` : ''}
-      <p class="note">Tipp: Schau abends unter Auswertung, wie viel der Schreibtisch im Standby zieht, und setze die Schwelle etwas darüber.</p>`;
     case 'vacation': {
       const v = c.vacation, todayTxt = d.vacationToday.map((s) => `${s.key} ${s.start}–${s.end}`).join(', ');
       return head + `<p class="intro">Damit das Haus bewohnt wirkt, geht ${esc(d.name)} in den Ferien morgens und abends an und wieder aus, jeden Tag zu einer anderen Zeit.</p>
@@ -1093,8 +1090,10 @@ app.addEventListener('click', async (e) => {
   } else if (stpRepeated) stpRepeated = false; // Klick nach gedrückt Halten: Wert ist schon gespeichert
   else if ((el = at('[data-step]'))) {
     haptic(); const p = el.dataset.step, dir = Number(el.dataset.dir);
-    if (p.startsWith('a:')) { const id = route()[3], a = dev(r1).cfg.actions.find((x) => x.id === id), k = p.slice(2); updAct(r1, id, { [k]: nextStep(el.dataset.list, a[k], dir) }); }
-    else saveCfg(r1, patchOf(p, nextStep(el.dataset.list, p.split('.').reduce((o, k) => o[k], dev(r1).cfg), dir)));
+    stpSave(p, nextStep(el.dataset.list, Number(el.parentElement.querySelector('.stpv').dataset.v), dir));
+  } else if ((el = at('[data-schsw]'))) {
+    haptic(); const id = el.dataset.schsw; el.setAttribute('aria-pressed', el.getAttribute('aria-pressed') !== 'true');
+    updSch(r1, (e) => (e.id === id ? { ...e, idle: !e.idle } : e));
   } else if ((el = at('[data-schday]'))) {
     haptic(); const [id, n] = el.dataset.schday.split('|'), k = Number(n);
     updSch(r1, (e) => (e.id === id ? { ...e, days: e.days.includes(k) ? e.days.filter((x) => x !== k) : [...e.days, k] } : e));

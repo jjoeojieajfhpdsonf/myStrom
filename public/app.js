@@ -353,7 +353,7 @@ function homeHTML() {
   const total = S.devices.reduce((a, d) => a + d.w, 0);
   const w1 = (w) => (w < 1000 ? `${w.toFixed(1)} W` : `${(w / 1000).toFixed(2)} kW`);
   return `${editHome ? '<header class="hd"><span></span><b>Anordnen</b><button type="button" class="ic done" data-editdone="1">Fertig</button></header>'
-      : `<header class="hd"><span></span><b>myStrom</b><button type="button" class="ic" data-go="more" aria-label="Mehr">${I.menu}</button></header>`}
+      : `<header class="hd"><button type="button" class="ic" data-menu="1" aria-label="Menü" aria-haspopup="dialog">${I.menu}</button><b>myStrom</b><span></span></header>`}
     <div class="grid home ${editHome ? 'editing' : ''}">
       ${(T.scenes = tile('scenes', I.scenes, 'Szenen'), T.rules = tile('rules', I.rules, 'Regeln'), T.guard = tile('guard', I.beach, 'Ferien'),
         T.energy = tile('energy', I.bolt, `<span class="dim">${pw(total)}</span><br>Verbrauch`), T.alarms = tile('alarms', I.bell, 'Alarme'), '')}
@@ -762,7 +762,7 @@ function setDesign(v) {
 }
 function moreHTML() {
   const s = S.settings;
-  return HD('Mehr', 'home') + `<p class="sec">Strom</p><div class="ls">${lrow('Preis pro kWh', `<input type="number" data-setting="price" value="${s.price}" step="0.01" min="0" max="2" inputmode="decimal">`, 'CHF')}</div>
+  return HD('Einstellungen', 'home') + `<p class="sec">Strom</p><div class="ls">${lrow('Preis pro kWh', `<input type="number" data-setting="price" value="${s.price}" step="0.01" min="0" max="2" inputmode="decimal">`, 'CHF')}</div>
     <p class="sec">Standort</p><div class="ls">
       ${lrow('Ort', `<input type="text" data-place="1" value="${esc(s.place || '')}" placeholder="z. B. Zürich" maxlength="80" enterkeyhint="search" autocomplete="off" style="max-width:200px">`, `${Number(s.lat).toFixed(2)}, ${Number(s.lon).toFixed(2)}${S.sun ? ` · Sonne ${S.sun.rise}–${S.sun.set}` : ''}`)}
       ${'geolocation' in navigator ? row('Standort vom Handy übernehmen', chev(), 'einmalig, nach deiner Freigabe', 'data-geo="1"') : ''}</div>
@@ -896,6 +896,39 @@ function tapFlip(el, d) {
   haptic();
   flip(tile, d, d.relay ? -1 : 1); // aus: nach links weg, an: nach rechts
 }
+// Menü von links: Bereiche, Steckdosen mit Zustand, Startseite anordnen, Einstellungen. Schliesst mit Tippen daneben, Esc oder nach links wischen.
+function openMenu() {
+  if (document.querySelector('.drawer')) return;
+  const el = document.createElement('div'), total = S.devices.reduce((a, d) => a + d.w, 0);
+  const item = (attr, icon, label, sub = '') => `<button type="button" class="ni" ${attr}><span class="nic">${icon}</span><span class="ntx">${label}${sub ? `<small>${sub}</small>` : ''}</span></button>`;
+  el.className = 'drawer';
+  el.innerHTML = `<div class="drawer-bg" data-close></div><nav class="drawer-panel" role="dialog" aria-modal="true" aria-label="Menü">
+    <div class="drawer-hd"><b>myStrom</b><span>${S.devices.length} Steckdose${S.devices.length === 1 ? '' : 'n'} · ${pw(total)}</span></div>
+    <div class="ngrp">${[['scenes', I.scenes, 'Szenen'], ['rules', I.rules, 'Regeln'], ['guard', I.beach, 'Ferien'], ['energy', I.bolt, 'Verbrauch'], ['alarms', I.bell, 'Alarme']]
+      .map(([h, ic, l]) => item(`data-ngo="${h}"`, ic, l)).join('')}</div>
+    <p class="nsec">Steckdosen</p><div class="ngrp">${S.devices.map((d) => item(`data-ngo="dev/${d.mac}"`, `<i class="dot ${!d.online ? 'off-line' : d.relay ? 'on' : ''}"></i>`, esc(d.name),
+      !d.online ? 'offline' : d.relay ? pw(d.w) : 'aus')).join('')}</div>
+    <div class="ngrp nfoot">${item('data-nedit="1"', I.menu, 'Startseite anordnen')}${item('data-ngo="more"', I.gear, 'Einstellungen')}</div>
+  </nav>`;
+  const close = () => { el.classList.remove('open'); removeEventListener('keydown', onKey); setTimeout(() => el.remove(), 260); document.querySelector('[data-menu]')?.focus(); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  el.addEventListener('click', (e) => {
+    const g = e.target.closest('[data-ngo]');
+    if (g) { haptic(); close(); if (cur() !== g.dataset.ngo) go(g.dataset.ngo); }
+    else if (e.target.closest('[data-nedit]')) { close(); if (cur() !== 'home' && cur() !== '') back('home'); setTimeout(enterEdit, 280); }
+    else if (e.target.closest('[data-close]')) close();
+  });
+  // nach links wischen schliesst; das Menü folgt dem Finger
+  const panel = el.querySelector('.drawer-panel'); let x0 = null, dx = 0;
+  panel.addEventListener('pointerdown', (e) => { x0 = e.clientX; dx = 0; });
+  panel.addEventListener('pointermove', (e) => { if (x0 == null) return; dx = Math.min(0, e.clientX - x0); if (dx < -6) { panel.style.transition = 'none'; panel.style.transform = `translateX(${dx}px)`; } });
+  const up = () => { if (x0 == null) return; x0 = null; panel.style.transition = ''; panel.style.transform = ''; if (dx < -70) close(); };
+  panel.addEventListener('pointerup', up); panel.addEventListener('pointercancel', up);
+  addEventListener('keydown', onKey);
+  document.body.append(el);
+  requestAnimationFrame(() => el.classList.add('open'));
+  setTimeout(() => { el.classList.add('open'); panel.querySelector('.ni')?.focus({ preventScroll: true }); }, 60);
+}
 function openDevPick() {
   document.querySelector('.pick')?.remove();
   const el = document.createElement('div');
@@ -1024,6 +1057,7 @@ app.addEventListener('click', async (e) => {
     saveCfg(r1, { schedule: { days: days.includes(n) ? days.filter((x) => x !== n) : [...days, n] } });
   } else if ((el = at('[data-dayshift]'))) { view.day = shiftPeriod(view.period, view.day, Number(el.dataset.dayshift)); if (view.day > S.today) view.day = S.today; render(); }
   else if (at('[data-devsel]')) { haptic(); openDevPick(); }
+  else if (at('[data-menu]')) { haptic(); openMenu(); }
   else if ((el = at('[data-run]'))) {
     el.disabled = true; haptic();
     try { const r = await api(`api/scenes/${el.dataset.run}/run`, { method: 'POST' }); await load(); toast(r.ok ? 'Szene ausgeführt' : `Nicht erreicht: ${r.errors.join(', ')}`, !r.ok); } catch (x) { toast(x.message, true); }

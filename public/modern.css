@@ -150,3 +150,6 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline-color: var(
 .stp button:active:not(:disabled) { background: rgb(255 255 255 / .14); }
 .stp button:disabled { opacity: .3; }
 .stp output { min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; font-size: 15.5px; white-space: nowrap; }
+/* Menü von links */
+.drawer-panel { background: var(--bg2); box-shadow: 1px 0 0 var(--line), 12px 0 40px rgb(0 0 0 / .5); border-radius: 0 24px 24px 0; }
+.ni:active, .ni:focus-visible { background: rgb(255 255 255 / .06); }

@@ -122,7 +122,7 @@ function daysText(days) {
 function featInfo(d, k) {
   const c = d.cfg;
   switch (k) {
-    case 'schedule': return [c.schedule.on, c.schedule.perDay ? `je Tag eigene Zeiten · ${daysText(c.schedule.days)}` : `${c.schedule.start}–${c.schedule.end} · ${daysText(c.schedule.days)}`];
+    case 'schedule': { const e = c.schedule.entries; return [c.schedule.on, e.length === 1 ? `${e[0].start}–${e[0].end} · ${daysText(e[0].days)}` : `${e.length} Zeitpläne · ${daysText(e.flatMap((x) => x.days))}`]; }
     case 'idle': return [c.idle.on, `ab ${c.idle.from}, unter ${c.idle.below} W`];
     case 'vacation': return [c.vacation.on, `${dShort(c.vacation.from)}–${dShort(c.vacation.to)}`];
     case 'sun': return [c.sun.on || c.sun.off, [c.sun.on && 'abends an', c.sun.off && 'morgens aus'].filter(Boolean).join(', ')];
@@ -273,24 +273,37 @@ const master = (d, k, label = 'Aktiv') => `<div class="row master"><span class="
 
 // Zahlen mit − / + statt Freitext: Schritte aus einer Liste sinnvoller Werte, Einheit gleich in der Anzeige
 const dur = (m) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m / 60} h`);
-const DURS = [1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 300, 360, 480, 600, 720, 960, 1200, 1440];
-const WATTS = [0, 0.5, 1, 2, 3, 5, 8, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 300, 500, 800, 1000, 1500, 2000, 3000];
+// bis 1 h in 5 min, bis 6 h in 15 min, darüber in 30 min; genauer per Antippen des Werts
+const DURS = [1, 2, 3, 4, ...Array.from({ length: 12 }, (_, i) => 5 + i * 5), ...Array.from({ length: 20 }, (_, i) => 75 + i * 15), ...Array.from({ length: 36 }, (_, i) => 390 + i * 30)];
+const WATTS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 120, 150, 200, 250, 300, 400, 500, 600, 800, 1000, 1200, 1500, 2000, 2500, 3000];
 const range = (a, b, st) => Array.from({ length: Math.round((b - a) / st) + 1 }, (_, i) => Math.round((a + i * st) * 10) / 10);
 const STEPS = {
   dur: [DURS, dur], dur240: [DURS.filter((m) => m <= 240), dur], dur0: [[0, ...DURS], (m) => (m ? dur(m) : 'sofort')],
   watt: [WATTS, (w) => `${String(w).replace('.', ',')} W`], watt1: [WATTS.filter((w) => w >= 1), (w) => `${w} W`],
-  offs: [[-180, -120, -90, -60, -45, -30, -20, -15, -10, -5, 0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180], (m) => (m ? `${m > 0 ? '+' : '−'}${dur(Math.abs(m))}` : 'genau')],
-  hours: [[...range(1, 12, 1), 18, 24, 36, 48], (h) => `${h} h`],
-  temp: [range(20, 90, 5), (t) => `${t} °C`],
+  offs: [range(-180, 180, 5), (m) => (m ? `${m > 0 ? '+' : '−'}${dur(Math.abs(m))}` : 'genau')],
+  hours: [range(1, 48, 1), (h) => `${h} h`],
+  temp: [range(20, 90, 1), (t) => `${t} °C`],
   tcorr: [range(-10, 10, 0.5), (t) => `${t > 0 ? '+' : t < 0 ? '−' : ''}${String(Math.abs(t)).replace('.', ',')} °C`],
 };
 // path: Einstellung (z. B. timer.mins) oder a:feld für die gerade offene Power Action
 const stepper = (path, list, v, label) => {
   const [vals, fmt] = STEPS[list];
   return `<span class="stp" role="group" aria-label="${esc(label)}"><button type="button" data-step="${path}" data-list="${list}" data-dir="-1" aria-label="weniger" ${v <= vals[0] ? 'disabled' : ''}>−</button>`
-    + `<output>${fmt(v)}</output><button type="button" data-step="${path}" data-list="${list}" data-dir="1" aria-label="mehr" ${v >= vals[vals.length - 1] ? 'disabled' : ''}>+</button></span>`;
+    + `<button type="button" class="stpv" data-stpedit="${path}" data-list="${list}" data-v="${v}" aria-label="${esc(label)}: ${fmt(v)}, antippen zum Eintippen">${fmt(v)}</button><button type="button" data-step="${path}" data-list="${list}" data-dir="1" aria-label="mehr" ${v >= vals[vals.length - 1] ? 'disabled' : ''}>+</button></span>`;
 };
 const srow = (label, ctrl, sub = '') => `<div class="row"><span class="tx"><b>${label}</b>${sub ? `<span>${sub}</span>` : ''}</span>${ctrl}</div>`;
+// Eintippen: Dauern als Std:Min, sonst Zahl; auf den erlaubten Bereich begrenzt, nicht auf die Schritte
+const stpParse = (list, raw) => {
+  const vals = STEPS[list][0], t = String(raw).trim().replace(',', '.');
+  let v = /^dur/.test(list) && t.includes(':') ? t.split(':').reduce((h, m) => h * 60 + Number(m), 0) : Number(t);
+  if (!Number.isFinite(v)) return null;
+  v = list === 'watt' || list === 'tcorr' ? Math.round(v * 10) / 10 : Math.round(v);
+  return Math.min(vals[vals.length - 1], Math.max(vals[0], v));
+};
+const stpSave = (path, v) => {
+  const [, r1, , id] = route();
+  if (path.startsWith('a:')) updAct(r1, id, { [path.slice(2)]: v }); else saveCfg(r1, patchOf(path, v));
+};
 const nextStep = (list, v, dir) => { const vals = STEPS[list][0]; return dir > 0 ? vals.find((x) => x > v) ?? vals[vals.length - 1] : [...vals].reverse().find((x) => x < v) ?? vals[0]; };
 const val = (t) => `<span class="val">${t}</span>`;
 const chev = (t = '') => `<span class="val">${t} ›</span>`;
@@ -353,7 +366,7 @@ function homeHTML() {
   const total = S.devices.reduce((a, d) => a + d.w, 0);
   const w1 = (w) => (w < 1000 ? `${w.toFixed(1)} W` : `${(w / 1000).toFixed(2)} kW`);
   return `${editHome ? '<header class="hd"><span></span><b>Anordnen</b><button type="button" class="ic done" data-editdone="1">Fertig</button></header>'
-      : `<header class="hd"><button type="button" class="ic" data-menu="1" aria-label="Menü" aria-haspopup="dialog">${I.menu}</button><b>myStrom</b><span></span></header>`}
+      : `<header class="hd"><span></span><b>myStrom</b><button type="button" class="ic" data-menu="1" aria-label="Menü" aria-haspopup="dialog">${I.menu}</button></header>`}
     <div class="grid home ${editHome ? 'editing' : ''}">
       ${(T.scenes = tile('scenes', I.scenes, 'Szenen'), T.rules = tile('rules', I.rules, 'Regeln'), T.guard = tile('guard', I.beach, 'Ferien'),
         T.energy = tile('energy', I.bolt, `<span class="dim">${pw(total)}</span><br>Verbrauch`), T.alarms = tile('alarms', I.bell, 'Alarme'), '')}
@@ -414,6 +427,7 @@ function actionsHTML(d, id) {
     <p class="note">${a.when === 'below' ? `Löst aus, wenn ${esc(d.name)} ${a.mins} Minuten lang unter ${a.watts} W zieht, aber erst nachdem es darüber gelaufen ist. Danach erst wieder nach dem nächsten Lauf.` : `Löst aus, wenn ${esc(d.name)} ${a.mins} Minuten lang über ${a.watts} W zieht. Erst wieder, nachdem es zwischendurch darunter war.`}</p>
     <button type="button" class="btn danger" data-adel="${a.id}">Power Action löschen</button>`;
 }
+const updSch = (mac, fn) => saveCfg(mac, { schedule: { entries: dev(mac).cfg.schedule.entries.map(fn).filter(Boolean) } });
 const updAct = (mac, id, patch) => saveCfg(mac, { actions: dev(mac).cfg.actions.map((a) => (a.id === id ? { ...a, ...patch } : a)) });
 function featureHTML(d, k, sub) {
   const c = d.cfg, back = k === 'tech' || k === 'room' || k === 'icon' ? `dev/${d.mac}/settings` : `dev/${d.mac}`; // roomnew hat eigenes Zurück
@@ -421,16 +435,14 @@ function featureHTML(d, k, sub) {
   const dim = (on) => (on ? 'ls' : 'ls dim');
   switch (k) {
     case 'schedule': {
-      const s = c.schedule, perDay = `<div class="row"><span class="tx"><b>Je Tag eigene Zeiten</b></span>${sw('schedule.perDay', s.perDay, 'Je Tag eigene Zeiten')}</div>`;
-      if (!s.perDay) return head + `<p class="intro">Schaltet jeden gewählten Tag zur selben Zeit ein und aus.</p>
-      <div class="${dim(s.on)}">${master(d, 'schedule')}${lrow('Ein um', inp('schedule.start', 'time', s.start))}${lrow('Aus um', inp('schedule.end', 'time', s.end))}${perDay}</div>
-      <p class="sec">Tage</p><div class="chips days">${WD.map(([n, l]) => `<button type="button" class="chip" data-day="${n}" aria-pressed="${s.days.includes(n)}">${l}</button>`).join('')}</div>`;
-      // je Tag: Tag antippen schaltet ihn ein oder aus, daneben Ein- und Ausschaltzeit
-      return head + `<p class="intro">Jeder Tag hat eigene Zeiten. Tag antippen nimmt ihn aus dem Zeitplan.</p>
-      <div class="${dim(s.on)}">${master(d, 'schedule')}${perDay}</div>
-      <p class="sec">Ein – Aus</p><div class="ls ${s.on ? '' : 'dim'} week">${WD.map(([n, l]) => { const on = s.days.includes(n), t = s.week[n]; return `<div class="row wday ${on ? '' : 'off'}">
-        <button type="button" class="chip" data-day="${n}" aria-pressed="${on}" aria-label="${l} ${on ? 'aktiv' : 'aus'}">${l}</button>
-        ${on ? `${inp(`schedule.week.${n}.start`, 'time', t.start, `aria-label="${l} ein um"`)}<i>–</i>${inp(`schedule.week.${n}.end`, 'time', t.end, `aria-label="${l} aus um"`)}` : '<span class="dim">kein Zeitplan</span>'}</div>`; }).join('')}</div>`;
+      // je Zeitplan: Ein, Aus, Tage. Tage eines anderen Zeitplans sind hier nicht wählbar (jeder Tag nur einmal)
+      const s = c.schedule, taken = (id) => s.entries.filter((e) => e.id !== id).flatMap((e) => e.days), free = WD.filter(([n]) => !s.entries.some((e) => e.days.includes(n)));
+      return head + `<p class="intro">Schaltet zu festen Zeiten ein und aus. Für andere Tage mit anderen Zeiten fügst du einen weiteren Zeitplan hinzu.</p>
+      <div class="${dim(s.on)}">${master(d, 'schedule')}</div>
+      ${s.entries.map((e, i) => `<div class="schd-hd"><p class="sec">${s.entries.length > 1 ? `Zeitplan ${i + 1} · ` : ''}${daysText(e.days)}</p>${s.entries.length > 1 ? `<button type="button" class="tlink" data-schdel="${e.id}">Entfernen</button>` : ''}</div>
+        <div class="${dim(s.on)}">${lrow('Ein um', `<input type="time" data-schin="${e.id}|start" value="${e.start}">`)}${lrow('Aus um', `<input type="time" data-schin="${e.id}|end" value="${e.end}">`)}</div>
+        <div class="chips days">${WD.filter(([n]) => !taken(e.id).includes(n)).map(([n, l]) => `<button type="button" class="chip" data-schday="${e.id}|${n}" aria-pressed="${e.days.includes(n)}">${l}</button>`).join('')}</div>`).join('')}
+      ${free.length ? `<button type="button" class="btn ghost" data-schadd="1">＋ Zeitplan hinzufügen</button>` : ''}`;
     }
     case 'idle': return head + `<p class="intro">Im Zeitfenster schaltet die Steckdose ab, sobald so wenig Strom fliesst, dass niemand mehr dran arbeitet. Arbeitest du noch (PC und Bildschirm ziehen mehr), wartet sie.</p>
       <div class="${dim(c.idle.on)}">${master(d, 'idle')}${lrow('Ab', inp('idle.from', 'time', c.idle.from))}${lrow('Bis', inp('idle.to', 'time', c.idle.to))}
@@ -794,7 +806,7 @@ function morph(a, b) {
   for (let i = bc.length; i < ac.length; i++) if (!ac[i].dataset?.transient) ac[i].remove();
 }
 function render(fresh = false) {
-  if (!S || swipe || drag || hdrag) return;
+  if (!S || swipe || drag || hdrag || stpHold || document.activeElement?.classList.contains('stpin')) return;
   const [r0, r1, r2, r3] = route(), d = r0 === 'dev' ? dev(r1) : null;
   let html;
   if (r0 === 'dev') html = !d ? `${HD('Steckdose', 'home')}<p class="empty-state">Diese Steckdose gibt es nicht mehr.</p>` : r2 ? featureHTML(d, r2, r3) : deviceHTML(d);
@@ -952,6 +964,28 @@ function openDevPick() {
   requestAnimationFrame(() => el.classList.add('open'));
   setTimeout(() => el.classList.add('open'), 60); // falls gerade kein Bild gezeichnet wird
 }
+// ---------- − / + gedrückt halten: wiederholt, immer schneller; gespeichert wird beim Loslassen ----------
+let stpHold = null, stpRepeated = false;
+app.addEventListener('pointerdown', (e) => {
+  const b = e.target.closest('[data-step]'); if (!b || b.disabled) return;
+  const path = b.dataset.step, list = b.dataset.list, dir = Number(b.dataset.dir), out = b.parentElement.querySelector('.stpv'), fmt = STEPS[list][1];
+  const h = (stpHold = { path, v: Number(out.dataset.v), n: 0 });
+  const tick = () => {
+    if (stpHold !== h) return;
+    h.v = nextStep(list, h.v, dir); h.n++; out.textContent = fmt(h.v); out.dataset.v = h.v; haptic(5);
+    h.t = setTimeout(tick, h.n < 4 ? 260 : h.n < 12 ? 140 : 70);
+  };
+  h.t = setTimeout(tick, 420);
+});
+const stpEnd = () => {
+  const h = stpHold; if (!h) return; clearTimeout(h.t); stpHold = null;
+  if (h.n) { stpRepeated = true; setTimeout(() => { stpRepeated = false; }, 400); stpSave(h.path, h.v); }
+};
+addEventListener('pointerup', stpEnd); addEventListener('pointercancel', stpEnd);
+app.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.classList?.contains('stpin')) e.target.blur(); });
+// Kopfzeile: oben ohne Kante, erst beim Scrollen als Glas abgesetzt
+const onScroll = () => document.documentElement.classList.toggle('scrolled', scrollY > 4);
+addEventListener('scroll', onScroll, { passive: true }); onScroll();
 // ---------- Klicks ----------
 // ---------- Startseite anordnen: lange drücken, dann Kacheln ziehen (wie auf dem iPhone) ----------
 let editHome = false, editOrder = null, hdrag = null, lp = null, lpFired = 0;
@@ -1048,14 +1082,28 @@ app.addEventListener('click', async (e) => {
     el.setAttribute('aria-pressed', on); haptic();
     saveCfg(mac, patchOf(p, on));
   } else if ((el = at('[data-set]'))) haptic(), saveCfg(r1, patchOf(el.dataset.set, /^\d+$/.test(el.dataset.v) ? Number(el.dataset.v) : el.dataset.v));
+  else if ((el = at('[data-stpedit]'))) {
+    const list = el.dataset.list, v = Number(el.dataset.v), isDur = /^dur/.test(list), inp = document.createElement('input');
+    inp.className = 'stpin'; inp.dataset.stpin = el.dataset.stpedit; inp.dataset.list = list;
+    if (isDur) { inp.type = 'text'; inp.inputMode = 'numeric'; inp.value = `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`; inp.placeholder = 'Std:Min'; }
+    else { inp.type = 'text'; inp.inputMode = list === 'offs' || list === 'tcorr' ? 'text' : 'decimal'; inp.value = String(v); }
+    inp.setAttribute('aria-label', el.getAttribute('aria-label').split(':')[0]);
+    inp.enterKeyHint = 'done'; el.replaceWith(inp); inp.focus(); inp.select();
+    inp.addEventListener('blur', () => setTimeout(() => render(), 0));
+  } else if (stpRepeated) stpRepeated = false; // Klick nach gedrückt Halten: Wert ist schon gespeichert
   else if ((el = at('[data-step]'))) {
     haptic(); const p = el.dataset.step, dir = Number(el.dataset.dir);
     if (p.startsWith('a:')) { const id = route()[3], a = dev(r1).cfg.actions.find((x) => x.id === id), k = p.slice(2); updAct(r1, id, { [k]: nextStep(el.dataset.list, a[k], dir) }); }
     else saveCfg(r1, patchOf(p, nextStep(el.dataset.list, p.split('.').reduce((o, k) => o[k], dev(r1).cfg), dir)));
-  } else if ((el = at('[data-day]'))) {
-    const n = Number(el.dataset.day), days = dev(r1).cfg.schedule.days;
-    saveCfg(r1, { schedule: { days: days.includes(n) ? days.filter((x) => x !== n) : [...days, n] } });
-  } else if ((el = at('[data-dayshift]'))) { view.day = shiftPeriod(view.period, view.day, Number(el.dataset.dayshift)); if (view.day > S.today) view.day = S.today; render(); }
+  } else if ((el = at('[data-schday]'))) {
+    haptic(); const [id, n] = el.dataset.schday.split('|'), k = Number(n);
+    updSch(r1, (e) => (e.id === id ? { ...e, days: e.days.includes(k) ? e.days.filter((x) => x !== k) : [...e.days, k] } : e));
+  } else if (at('[data-schadd]')) {
+    // neuer Zeitplan bekommt alle noch freien Tage
+    haptic(); const sc = dev(r1).cfg.schedule, used = sc.entries.flatMap((e) => e.days), last = sc.entries[sc.entries.length - 1];
+    saveCfg(r1, { schedule: { entries: [...sc.entries, { id: `s${Date.now().toString(36)}`, start: last?.start || '07:00', end: last?.end || '23:00', days: WD.map(([n]) => n).filter((n) => !used.includes(n)) }] } });
+  } else if ((el = at('[data-schdel]'))) { haptic(); updSch(r1, (e) => (e.id === el.dataset.schdel ? null : e)); }
+  else if ((el = at('[data-dayshift]'))) { view.day = shiftPeriod(view.period, view.day, Number(el.dataset.dayshift)); if (view.day > S.today) view.day = S.today; render(); }
   else if (at('[data-devsel]')) { haptic(); openDevPick(); }
   else if (at('[data-menu]')) { haptic(); openMenu(); }
   else if ((el = at('[data-run]'))) {
@@ -1098,6 +1146,10 @@ app.addEventListener('change', async (e) => {
     t.blur();
     try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { place: t.value.trim() } }) }); render(); toast(`Gefunden: ${S.settings.place}`); load(); }
     catch (x) { toast(x.message, true); render(); }
+  } else if (t.dataset.stpin) {
+    const v = stpParse(t.dataset.list, t.value); t.blur(); if (v == null) toast('Bitte eine Zahl eingeben', true); else stpSave(t.dataset.stpin, v);
+  } else if (t.dataset.schin) {
+    const [id, k] = t.dataset.schin.split('|'); t.blur(); updSch(r1, (e) => (e.id === id ? { ...e, [k]: t.value } : e));
   } else if (t.dataset.ain) {
     const v = t.type === 'number' ? Number(t.value) : t.value.trim(); t.blur(); updAct(r1, route()[3], { [t.dataset.ain]: v });
   } else if (t.dataset.expIn) { exp[t.dataset.expIn] = t.value; if (exp.from > exp.to) [exp.from, exp.to] = [exp.to, exp.from]; t.blur(); render(); }

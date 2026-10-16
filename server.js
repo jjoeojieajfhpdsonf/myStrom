@@ -105,9 +105,8 @@ const DEFAULT_CFG = () => {
   return {
     name: '', room: '', icon: '', tcorr: 0, lock: false,
     actions: [], // Power Actions: wenn über/unter X W, dann …
-    // perDay: je Wochentag eigene Zeiten aus week (0 = So … 6 = Sa), sonst start/end für alle gewählten Tage
-    schedule: { on: false, start: '07:00', end: '23:00', days: [1, 2, 3, 4, 5, 6, 0], perDay: false,
-      week: Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((n) => [n, { start: '07:00', end: '23:00' }])) },
+    // mehrere Zeitpläne mit eigenen Zeiten; jeder Wochentag (0 = So … 6 = Sa) gehört höchstens zu einem
+    schedule: { on: false, entries: [{ id: 's1', start: '07:00', end: '23:00', days: [1, 2, 3, 4, 5, 6, 0] }] },
     idle: { on: false, from: '23:00', to: '07:00', below: 25, mins: 10, backOn: true }, // nachts aus, wenn nicht mehr benutzt
     temp: { on: false, max: 45 },
     sun: { on: false, off: false, onOffset: 0, offOffset: 0 },
@@ -124,6 +123,7 @@ function clean(def, val, key = '') {
   if (typeof def === 'boolean') return Boolean(val);
   if (typeof def === 'number') { const n = Number(val), [lo, hi] = LIMITS[key] || [-1e6, 1e6]; return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : def; }
   if (key === 'actions') return cleanActions(val);
+  if (key === 'schedule') return cleanSchedule(val);
   if (Array.isArray(def)) return Array.isArray(val) ? [...new Set(val.map(Number).filter((x) => Number.isInteger(x) && x >= 0 && x <= 6))] : def;
   if (typeof def === 'object') return Object.fromEntries(Object.entries(def).map(([k, d]) => [k, clean(d, val[k], k)]));
   const s = String(val).trim();
@@ -131,6 +131,17 @@ function clean(def, val, key = '') {
   if (/^\d{4}-\d{2}-\d{2}$/.test(def)) return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : def;
   if (key === 'back') return ['hand', 'time', 'after'].includes(s) ? s : def;
   return s.slice(0, 40);
+}
+// Zeitpläne prüfen; alte Form (ein start/end/days) wird zum ersten Eintrag. Ein Tag, der schon vergeben ist, fällt beim späteren weg.
+function cleanSchedule(v) {
+  const hm = (x, d) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(x)) ? String(x) : d), used = new Set();
+  const raw = Array.isArray(v.entries) ? v.entries : v.start ? [{ id: 's1', start: v.start, end: v.end, days: v.days }] : [{ id: 's1' }];
+  const entries = raw.slice(0, 7).map((e, i) => {
+    const days = [...new Set((Array.isArray(e.days) ? e.days : [1, 2, 3, 4, 5, 6, 0]).map(Number))].filter((x) => Number.isInteger(x) && x >= 0 && x <= 6 && !used.has(x));
+    days.forEach((x) => used.add(x));
+    return { id: /^[\w-]{1,16}$/.test(e.id) ? e.id : `s${i + 1}`, start: hm(e.start, '07:00'), end: hm(e.end, '23:00'), days };
+  });
+  return { on: Boolean(v.on), entries };
 }
 // Power Actions prüfen: Bedingung (über/unter Watt, Mindestdauer) und was dann passiert
 const ACT_THEN = ['notify', 'off', 'other-on', 'other-off'];
@@ -301,8 +312,8 @@ async function runRules(d, prev, now) {
   if (!r.online) return;
   const sw = async (on, why) => { if (r.relay !== on) await setRelay(d.mac, on, why); };
   // Zeitplan
-  if (c.schedule.on && c.schedule.days.includes(weekday(now))) {
-    const t = c.schedule.perDay ? c.schedule.week[weekday(now)] : c.schedule;
+  const t = c.schedule.on && c.schedule.entries.find((e) => e.days.includes(weekday(now)));
+  if (t) {
     if (crossed(hm2min(t.start))) await sw(true, 'Zeitplan');
     if (crossed(hm2min(t.end))) await sw(false, 'Zeitplan');
   }
@@ -604,9 +615,7 @@ const server = http.createServer(async (req, res) => {
       return json(deviceJson(dev));
     }
     if (dm && req.method === 'PUT') {
-      const b = await readBody(req), sch = b.cfg?.schedule;
-      // „Je Tag eigene Zeiten“ eingeschaltet: alle Tage starten mit den bisherigen Zeiten
-      if (sch?.perDay && !dev.cfg.schedule.perDay && !sch.week) sch.week = Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((n) => [n, { start: dev.cfg.schedule.start, end: dev.cfg.schedule.end }]));
+      const b = await readBody(req);
       dev.cfg = clean(DEFAULT_CFG(), merge(dev.cfg, b.cfg || {}));
       saveDevice(dev);
       return json(deviceJson(dev));
@@ -691,7 +700,7 @@ if (CFG.demo && !devices.size) {
   for (const [mac, name, room] of names) {
     const cfg = { ...DEFAULT_CFG(), name, room };
     if (mac.endsWith('1')) cfg.idle.on = true;
-    if (mac.endsWith('2')) cfg.schedule = { ...cfg.schedule, on: true, start: '06:30', end: '23:00' };
+    if (mac.endsWith('2')) cfg.schedule = { on: true, entries: [{ id: 's1', start: '06:30', end: '23:00', days: [1, 2, 3, 4, 5] }, { id: 's2', start: '08:30', end: '23:30', days: [6, 0] }] };
     if (mac.endsWith('3')) cfg.vacation.on = true;
     const d = { mac, ip: `demo-${mac.slice(-1)}`, type: 106, fw: '4.0.14', cfg, added: Date.now() };
     devices.set(mac, d); saveDevice(d);

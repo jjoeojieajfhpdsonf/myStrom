@@ -17,7 +17,9 @@ main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: m
 
 /* Kopfzeile aus Glas, gleiche Position der Knöpfe */
 .hd { top: env(safe-area-inset-top, 0px); margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))) 12px; padding: 6px max(10px, env(safe-area-inset-left, 0px)); min-height: 56px;
-  background: rgb(11 13 16 / .72); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); border-bottom: 1px solid var(--line); }
+  background: transparent; border-bottom: 1px solid transparent; transition: background-color .2s, border-color .2s; }
+/* erst beim Scrollen abgesetzt, oben fliesst der Hintergrund durch */
+html.scrolled .hd { background: rgb(11 13 16 / .72); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); border-bottom-color: var(--line); }
 .hd b { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
 .hd .ic { width: 44px; height: 44px; border-radius: 50%; background: rgb(255 255 255 / .06); font-size: 22px; }
 .hd .ic svg { width: 20px; height: 20px; }
@@ -134,15 +136,6 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline-color: var(
 .pick .tile.room.sel { box-shadow: inset 0 0 0 1.5px rgb(238 241 244 / .7); }
 .pick .tile.room.sel:not(.on) { background: linear-gradient(160deg, var(--tile2), var(--tile)); }
 
-/* Zeitplan je Tag: Tag als runder Knopf, daneben Ein- und Ausschaltzeit */
-.ls.week .row.wday { gap: 10px; }
-.ls.week .row.wday .chip { width: 44px; min-width: 44px; height: 38px; padding: 0; flex: none; }
-.ls.week .row.wday i { font-style: normal; color: var(--mut, #888); }
-.ls.week .row.wday input[type="time"] { flex: 1; min-width: 0; }
-.ls.week .row.wday .dim { flex: 1; text-align: right; color: var(--mut, #888); font-size: 15px; }
-.ls.week .row.wday input[type="time"] { padding-left: 10px; padding-right: 10px; text-align: center; font-variant-numeric: tabular-nums; }
-.ls.week .row.wday input[type="time"]::-webkit-calendar-picker-indicator { display: none; }
-.ls.week .row.wday .chip[aria-pressed="true"] { background: var(--on-chip); color: var(--on-chiptxt); box-shadow: inset 0 0 0 1px var(--on-line); font-weight: 600; }
 
 /* − / + statt Zahlenfeld */
 .stp { display: inline-flex; align-items: center; gap: 4px; flex: none; background: rgb(255 255 255 / .06); border-radius: 12px; padding: 3px; }
@@ -153,3 +146,12 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline-color: var(
 /* Menü von links */
 .drawer-panel { background: var(--bg2); box-shadow: 1px 0 0 var(--line), 12px 0 40px rgb(0 0 0 / .5); border-radius: 0 24px 24px 0; }
 .ni:active, .ni:focus-visible { background: rgb(255 255 255 / .06); }
+/* Zeitplan: Kopf je Eintrag mit „Entfernen“ */
+.schd-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.schd-hd .tlink { color: var(--red, #ff5a4e); font-size: 14.5px; padding: 8px 4px; }
+.stp .stpv { min-width: 72px; height: 34px; padding: 0 6px; border-radius: 9px; text-align: center; font-variant-numeric: tabular-nums; font-size: 15.5px; white-space: nowrap; color: var(--fg); background: transparent; }
+.stp .stpv:active { background: rgb(255 255 255 / .08); }
+.stp .stpin { width: 72px; height: 34px; padding: 0 6px; text-align: center; font: inherit; font-size: 16px; color: var(--fg); background: rgb(255 255 255 / .1); border: 0; border-radius: 9px; box-shadow: inset 0 0 0 1.5px var(--on-line); }
+.stp button[data-step] { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+/* gewählte Chips (Tage, Dauer, Design …) dezent wie die eingeschalteten Kacheln statt voller grüner Fläche */
+.chip[aria-pressed="true"] { background: var(--on-chip); color: var(--on-chiptxt); box-shadow: inset 0 0 0 1px var(--on-line); font-weight: 600; }

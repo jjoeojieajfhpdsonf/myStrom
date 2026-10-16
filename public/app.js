@@ -476,8 +476,9 @@ function featureHTML(d, k, sub) {
       <div class="chips">${[['hand', 'Von Hand'], ['time', 'Um eine Uhrzeit'], ['after', 'Nach Stunden']].map(([v, l]) => `<button type="button" class="chip" data-set="saver.back" data-v="${v}" aria-pressed="${s.back === v}">${l}</button>`).join('')}</div>
       ${s.back === 'time' ? `<div class="ls">${lrow('Um', inp('saver.at', 'time', s.at))}</div>` : s.back === 'after' ? `<div class="ls">${srow('Nach', stepper('saver.hours', 'hours', s.hours, 'Nach'))}</div>` : '<p class="note">Erst wieder an, wenn du sie in der App, mit einer Szene oder am Knopf der Steckdose einschaltest.</p>'}`;
     }
-    case 'temp': return head + `<p class="intro">Die Steckdose misst ihre eigene Temperatur, jetzt ${d.temp != null ? `${d.temp.toFixed(1)} °C` : '–'}. Wird sie zu warm, schaltet sie ab.</p>
-      <div class="${dim(c.temp.on)}">${master(d, 'temp', 'Bei Hitze ausschalten')}${srow('Aus über', stepper('temp.max', 'temp', c.temp.max, 'Aus über'))}</div>`;
+    case 'temp': return head + tempChartHTML(d)
+      + `<p class="sec">Schutz</p><div class="${dim(c.temp.on)}">${master(d, 'temp', 'Bei Hitze ausschalten')}${srow('Aus über', stepper('temp.max', 'temp', c.temp.max, 'Aus über'))}</div>
+      <p class="note">Die Steckdose misst ihre eigene Temperatur, also etwas wärmer als der Raum, wenn viel Strom fliesst. Abgleichen kannst du das unter Einstellungen › Temperatur-Korrektur.</p>`;
     case 'alarms': return head + `<p class="intro">Mitteilung aufs Handy, wenn bei ${esc(d.name)} etwas passiert. ${S.pushSubs ? '' : '<a href="#alarms">Mitteilungen zuerst erlauben ›</a>'}</p>
       <div class="ls">${[['offline', 'Offline', 'keine Antwort seit 3 Minuten'], ['unusual', 'Ungewöhnlicher Verbrauch', 'deutlich mehr als sonst'], ['switchedOn', 'Eingeschaltet', 'am Gerät oder von einer Regel'], ['hot', 'Zu warm', `über ${c.temp.on ? c.temp.max : 45} °C`]]
         .map(([key, l, sub]) => `<div class="row"><span class="tx"><b>${l}</b><span>${sub}</span></span>${sw(`alarms.${key}`, c.alarms[key], l)}</div>`).join('')}</div>`;
@@ -623,6 +624,84 @@ function chartHTML(mac, pick) {
     <div class="chart" data-chart="${key}" data-keep="${key}${live}"><div class="empty">Lädt …</div></div>
     <div class="foot" data-foot data-keep="${key}${live}"><div><b>–<small> kWh</small></b><span>Verbrauch</span></div><i></i><div><b>–<small> CHF</small></b><span>Kosten</span></div></div>`;
 }
+// ---------- Temperaturverlauf ----------
+const tview = { period: 'day', day: null };
+const TPERIODS = [['day', 'Tag'], ['week', 'Woche'], ['month', 'Monat']];
+const deg = (v) => (v == null ? '–' : v.toFixed(1));
+function tempChartHTML(d) {
+  tview.day ||= S.today;
+  const p = tview.period, ref = periodStart(p, tview.day), live = periodStart(p, S.today) === ref ? `|${Math.floor(S.now / 300e3)}` : '', key = `${d.mac}|${p}|${ref}`;
+  return `<div class="big"><b>${deg(d.temp)}<small> °C</small></b><span>Temperatur jetzt</span></div>
+    <div class="periods" role="group" aria-label="Zeitraum">${TPERIODS.map(([k, l]) => `<button type="button" data-tperiod="${k}" aria-pressed="${p === k}">${l}</button>`).join('')}</div>
+    <div class="nav"><span class="sp"></span><span class="date">${periodLabel(p, tview.day)}</span><button type="button" class="arr" data-tshift="-1" aria-label="zurück">‹</button><button type="button" class="arr" data-tshift="1" aria-label="vor" ${shiftPeriod(p, tview.day, 1) > S.today ? 'disabled' : ''}>›</button></div>
+    <div class="chart temp" data-tchart="${key}" data-keep="${key}${live}"><div class="empty">Lädt …</div></div>
+    <div class="foot three" data-tfoot data-keep="${key}${live}"><div><b>–</b><span>Tiefst</span></div><i></i><div><b>–</b><span>Mittel</span></div><i></i><div><b>–</b><span>Höchst</span></div></div>`;
+}
+const temps = new Map();
+async function tempData(mac, period, ref) {
+  const k = `${mac}|${period}|${ref}`, c = temps.get(k);
+  if (c && Date.now() - c.at < 60e3) return c.data;
+  const data = await api(`api/temp?mac=${mac}&period=${period}&ref=${ref}`);
+  temps.set(k, { at: Date.now(), data });
+  return data;
+}
+// gemeinsame Achse: auf ganze Grad mit etwas Luft, Schwelle „Aus über“ nur wenn sie in der Nähe liegt
+function tempAxis(lo, hi, limit) {
+  if (limit != null && limit <= hi + 6) hi = Math.max(hi, limit);
+  lo = Math.floor(lo - 1); hi = Math.ceil(hi + 1);
+  const step = [1, 2, 5, 10].find((x) => (hi - lo) / x <= 5) || 10;
+  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  return { lo, hi, step };
+}
+function tempSVG(t, limit) {
+  const W0 = 38, W1 = 316, H0 = 14, H1 = 190, ax = tempAxis(t.min, t.max, limit), y = (v) => H1 - (H1 - H0) * (v - ax.lo) / (ax.hi - ax.lo);
+  const grid = Array.from({ length: Math.round((ax.hi - ax.lo) / ax.step) + 1 }, (_, k) => ax.lo + k * ax.step);
+  const gridSVG = grid.map((g) => `<line x1="${W0}" x2="${W1}" y1="${y(g)}" y2="${y(g)}" stroke="#3a3a3a" stroke-width=".6"/><text x="${W0 - 4}" y="${y(g) + 3}" text-anchor="end" font-size="9" fill="#bdbdbd">${g}°</text>`).join('');
+  const lim = limit != null && limit <= ax.hi ? `<line class="tlim" x1="${W0}" x2="${W1}" y1="${y(limit)}" y2="${y(limit)}" stroke="#ff5a4e" stroke-dasharray="4 3" stroke-width=".9"/><text x="${W1}" y="${y(limit) - 4}" text-anchor="end" font-size="9" fill="#ff5a4e">aus über ${limit}°</text>` : '';
+  if (t.period === 'day') {
+    const n = t.t.length, x = (i) => W0 + (W1 - W0) * i / (n - 1), segs = []; let cur = [];
+    t.t.forEach((v, i) => { if (v == null) { if (cur.length) segs.push(cur); cur = []; } else cur.push([x(i), y(v)]); });
+    if (cur.length) segs.push(cur);
+    for (const sg of segs) if (sg.length === 1) sg.push([sg[0][0] + (W1 - W0) / (n - 1), sg[0][1]]);
+    return `<svg viewBox="0 0 320 214" role="img" aria-label="Temperatur ${dayLabel(t.ref)}, ${deg(t.min)} bis ${deg(t.max)} °C">${gridSVG}${lim}
+      ${segs.map((sg) => `<path class="tline" d="M${sg.map((q) => q.join(',')).join(' L')}" fill="none" stroke="#efefef" stroke-width="1.4" stroke-linejoin="round"/>`).join('')}
+      <line x1="${W0}" x2="${W0}" y1="${H0 - 8}" y2="${H1}" stroke="#bdbdbd" stroke-width=".8"/>
+      ${['00:00', '06:00', '12:00', '18:00', '24:00'].map((l, k) => `<text x="${W0 + (W1 - W0) * k / 4}" y="${H1 + 16}" text-anchor="${k === 0 ? 'start' : k === 4 ? 'end' : 'middle'}" font-size="9" fill="#bdbdbd">${l}</text>`).join('')}
+      <line class="cur" x1="0" x2="0" y1="${H0}" y2="${H1}" stroke="#5ab400" stroke-width="1" visibility="hidden"/></svg>`;
+  }
+  // Woche/Monat: Spanne vom Tiefst- zum Höchstwert je Tag, Strich beim Mittel
+  const n = t.days.length, slot = (W1 - W0) / n, bw = Math.max(3, Math.min(14, slot * 0.5));
+  return `<svg viewBox="0 0 320 214" role="img" aria-label="Temperatur je Tag, ${deg(t.min)} bis ${deg(t.max)} °C">${gridSVG}${lim}
+    ${t.days.map((dd, i) => { if (dd.min == null) return ''; const cx = W0 + slot * (i + 0.5), top = y(dd.max), h = Math.max(bw, y(dd.min) - top);
+      return `<rect class="tbar${dd.key === S.today ? ' now' : ''}" x="${(cx - bw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="${(bw / 2).toFixed(1)}" fill="#bdbdbd"/>
+        <line class="tavg" x1="${(cx - bw / 2 - 1).toFixed(1)}" x2="${(cx + bw / 2 + 1).toFixed(1)}" y1="${y(dd.avg).toFixed(1)}" y2="${y(dd.avg).toFixed(1)}" stroke="#111" stroke-width="1.4"/>`; }).join('')}
+    <line x1="${W0}" x2="${W1}" y1="${H1}" y2="${H1}" stroke="#bdbdbd" stroke-width=".8"/>
+    ${t.days.map((dd, i) => (t.period === 'week' || i === 0 || (i + 1) % 5 === 0 ? `<text x="${(W0 + slot * (i + 0.5)).toFixed(1)}" y="${H1 + 14}" text-anchor="middle" font-size="9" fill="#bdbdbd">${dd.label}</text>` : '')).join('')}
+  </svg>`;
+}
+// Finger oder Maus übers Diagramm: Uhrzeit bzw. Tag mit Temperatur
+function tempTip(el, t) {
+  const svg = $('svg', el), cur = $('.cur', svg); let tip = $('.tip', el);
+  const show = (e) => {
+    const r = svg.getBoundingClientRect(), vx = (e.clientX - r.left) / r.width * 320;
+    let text, x;
+    if (t.period === 'day') {
+      const i = Math.round((vx - 38) / (316 - 38) * (t.t.length - 1));
+      if (i < 0 || i >= t.t.length || t.t[i] == null) { hide(); return; }
+      x = 38 + (316 - 38) * i / (t.t.length - 1); const min = i * 5;
+      text = `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')} · ${deg(t.t[i])} °C`;
+      cur.setAttribute('x1', x); cur.setAttribute('x2', x); cur.setAttribute('visibility', 'visible');
+    } else {
+      const slot = (316 - 38) / t.days.length, i = Math.floor((vx - 38) / slot), dd = t.days[i];
+      if (!dd || dd.min == null) { hide(); return; }
+      x = 38 + slot * (i + 0.5); text = `${t.period === 'week' ? dd.label : `${dd.label}.`} · ${deg(dd.min)}–${deg(dd.max)} °C`;
+    }
+    if (!tip) { tip = document.createElement('span'); tip.className = 'tip'; el.append(tip); }
+    tip.textContent = text; tip.style.left = `${x / 320 * r.width + 2}px`;
+  };
+  const hide = () => { cur?.setAttribute('visibility', 'hidden'); tip?.remove(); tip = null; };
+  svg.addEventListener('pointermove', show); svg.addEventListener('pointerdown', show); svg.addEventListener('pointerleave', hide);
+}
 function totalsHTML(mac) { return `<div class="ls" data-totals="${mac}" data-keep="${mac}|${Math.floor(S.now / 60e3)}"></div>`; }
 // Diagramm und Summen nachladen, nachdem die Seite steht
 async function fillCharts() {
@@ -645,6 +724,17 @@ async function fillCharts() {
       const foot = $('[data-foot]');
       if (foot) { foot.dataset.filled = foot.dataset.keep; foot.innerHTML = `<div><b>${kwh(c.wh)}<small> kWh</small></b><span>Verbrauch</span></div><i></i><div><b>${chf(c.wh)}<small> CHF</small></b><span>Kosten</span></div>`; }
       chartTip(el, c);
+    } catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  }
+  for (const el of document.querySelectorAll('[data-tchart]:not([data-filled])')) {
+    const [mac, period, ref] = el.dataset.tchart.split('|'); el.dataset.filled = el.dataset.keep;
+    try {
+      const t = await tempData(mac, period, ref), d = dev(mac);
+      if (!el.isConnected) return;
+      el.innerHTML = t.min == null ? `<div class="empty">Keine Messungen für diesen Zeitraum</div>` : tempSVG(t, d?.cfg.temp.on ? d.cfg.temp.max : null);
+      if (t.min != null) tempTip(el, t);
+      const foot = $('[data-tfoot]');
+      if (foot) { foot.dataset.filled = foot.dataset.keep; foot.innerHTML = [['Tiefst', t.min], ['Mittel', t.avg], ['Höchst', t.max]].map(([l, v]) => `<div><b>${deg(v)}<small> °C</small></b><span>${l}</span></div>`).join('<i></i>'); }
     } catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
   }
   for (const el of document.querySelectorAll('[data-totals]:not([data-filled])')) {
@@ -1064,6 +1154,8 @@ app.addEventListener('click', async (e) => {
   else if ((el = at('[data-aset]'))) { haptic(); const [f, v] = el.dataset.aset.split('|'), a = route()[3], patch = { [f]: v }; if (f === 'then' && v.startsWith('other') && !dev(r1).cfg.actions.find((x) => x.id === a).target) patch.target = S.devices.find((x) => x.mac !== r1)?.mac || ''; updAct(r1, a, patch); }
   else if ((el = at('[data-adel]'))) { if (!confirm('Power Action löschen?')) return; await saveCfg(r1, { actions: dev(r1).cfg.actions.filter((x) => x.id !== el.dataset.adel) }); back(`dev/${r1}/actions`); }
   else if ((el = at('[data-period]'))) { haptic(); view.period = el.dataset.period; render(); }
+  else if ((el = at('[data-tperiod]'))) { haptic(); tview.period = el.dataset.tperiod; render(); }
+  else if ((el = at('[data-tshift]'))) { tview.day = shiftPeriod(tview.period, tview.day, Number(el.dataset.tshift)); if (tview.day > S.today) tview.day = S.today; render(); }
   else if ((el = at('[data-exp-mac]'))) { exp.mac = el.dataset.expMac; render(); }
   else if ((el = at('[data-exp-range]'))) { [exp.from, exp.to] = el.dataset.expRange.split('|'); render(); }
   else if ((el = at('[data-exp-res]'))) { exp.res = el.dataset.expRes; render(); }

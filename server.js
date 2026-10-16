@@ -52,6 +52,8 @@ const q = {
   sumBetween: db.prepare('SELECT COALESCE(SUM(wh), 0) AS wh FROM samples WHERE mac = ? AND ts >= ? AND ts < ?'),
   sumBetweenAll: db.prepare('SELECT COALESCE(SUM(wh), 0) AS wh FROM samples WHERE ts >= ? AND ts < ?'),
   firstTs: db.prepare('SELECT MIN(ts) AS ts FROM samples WHERE mac = ?'),
+  temps: db.prepare('SELECT ts, temp FROM samples WHERE mac = ? AND ts >= ? AND ts < ? AND temp IS NOT NULL ORDER BY ts'),
+  tempStats: db.prepare('SELECT MIN(temp) AS min, MAX(temp) AS max, AVG(temp) AS avg FROM samples WHERE mac = ? AND ts >= ? AND ts < ? AND temp IS NOT NULL'),
   onPowers: db.prepare('SELECT w FROM samples WHERE mac = ? AND ts >= ? AND relay = 1'),
   delSamples: db.prepare('DELETE FROM samples WHERE mac = ?'),
   addEvent: db.prepare('INSERT INTO events (ts, mac, kind, text) VALUES (?, ?, ?, ?)'),
@@ -489,6 +491,25 @@ function apiBars(mac, period, ref) {
   const bars = buckets.map((b) => ({ key: b.key, label: b.label, wh: b.from > now ? null : sumOver(mac, () => q.sumBetweenAll.get(b.from, b.to).wh, (m) => q.sumBetween.get(m, b.from, b.to).wh) }));
   return { period, ref, bars, wh: bars.reduce((a, b) => a + (b.wh || 0), 0) };
 }
+// Temperatur (mit Korrektur der Steckdose): Tag in 5-Minuten-Mittelwerten, Woche/Monat als Tiefst-, Mittel- und Höchstwert je Tag
+function apiTemp(d, period, ref) {
+  const k = d.cfg.tcorr, r1 = (x) => (x == null ? null : Math.round((x + k) * 10) / 10);
+  if (period === 'day') {
+    const from = dayStart(ref), to = dayStart(addDays(ref, 1)), n = Math.round((to - from) / 300e3), sum = Array(n).fill(0), cnt = Array(n).fill(0);
+    for (const x of q.temps.all(d.mac, from, to)) { const i = Math.floor((x.ts - from) / 300e3); sum[i] += x.temp; cnt[i]++; }
+    const st = q.tempStats.get(d.mac, from, to);
+    return { period, ref, t: sum.map((v, i) => (cnt[i] ? r1(v / cnt[i]) : null)), min: r1(st.min), max: r1(st.max), avg: r1(st.avg) };
+  }
+  const start = period === 'week' ? addDays(ref, -((new Date(`${ref}T12:00:00Z`).getUTCDay() + 6) % 7)) : `${ref.slice(0, 7)}-01`;
+  const len = period === 'week' ? 7 : new Date(Date.UTC(Number(ref.slice(0, 4)), Number(ref.slice(5, 7)), 0)).getUTCDate();
+  const days = Array.from({ length: len }, (_, i) => {
+    const day = addDays(start, i), st = q.tempStats.get(d.mac, dayStart(day), dayStart(addDays(day, 1)));
+    return { key: day, label: period === 'week' ? ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'][i] : String(i + 1), min: r1(st.min), max: r1(st.max), avg: r1(st.avg) };
+  });
+  const has = days.filter((x) => x.min != null);
+  return { period, ref, days, min: has.length ? Math.min(...has.map((x) => x.min)) : null, max: has.length ? Math.max(...has.map((x) => x.max)) : null,
+    avg: has.length ? Math.round(has.reduce((a, x) => a + x.avg, 0) / has.length * 10) / 10 : null };
+}
 // CSV: Rohdaten (alle 30 s) oder zusammengefasst je 5 Minuten, Stunde oder Tag (Mittelwert Leistung, Summe Energie)
 function csvExport(mac, from, to, res = 'raw') {
   const a = dayStart(from), b = dayStart(addDays(to, 1));
@@ -662,6 +683,11 @@ const server = http.createServer(async (req, res) => {
       const mac = sp.get('mac') || 'all', period = sp.get('period'), ref = sp.get('ref') || dayKey(Date.now());
       if (!['week', 'month', 'year'].includes(period) || !isDay(ref) || !validMac(mac)) return json({ error: 'period (week|month|year), ref (JJJJ-MM-TT) und mac angeben' }, 400);
       return json(apiBars(mac, period, ref));
+    }
+    if (p === '/api/temp') {
+      const d = devices.get(sp.get('mac')), period = sp.get('period') || 'day', ref = sp.get('ref') || dayKey(Date.now());
+      if (!d || !['day', 'week', 'month'].includes(period) || !isDay(ref)) return json({ error: 'mac, period (day|week|month) und ref (JJJJ-MM-TT) angeben' }, 400);
+      return json(apiTemp(d, period, ref));
     }
     if (p === '/api/totals') { const mac = sp.get('mac') || 'all'; if (!validMac(mac)) return json({ error: 'unbekanntes Gerät' }, 400); return json(apiTotals(mac)); }
     if (p === '/api/events') { const mac = sp.get('mac'); return json(q.events.all(mac, mac, Math.min(200, Number(sp.get('n') || 50)))); }

@@ -161,3 +161,11 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline-color: var(
 html.paging .hd { transition: none; }
 /* Streifen unter der Statusleiste (iPhone, Vollbild) in Kopfzeilenfarbe, darunter scrollt nichts sichtbar durch */
 body::before { background: var(--top); }
+/* Temperaturverlauf: warmer, gedämpfter Ton statt Grün; Schwelle rot gestrichelt */
+.chart.temp svg .tline { stroke: #e3a25c; }
+.chart.temp svg .tbar { fill: rgb(227 162 92 / .55); }
+.chart.temp svg .tbar.now { fill: #e3a25c; }
+.chart.temp svg .tavg { stroke: var(--bg); }
+.chart.temp svg .cur { stroke: #e3a25c; }
+.foot.three b { font-size: 24px; }
+.nav .sp { flex: 1; }

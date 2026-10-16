@@ -276,24 +276,24 @@ const subOf = (d) => (!d.online ? d.status : d.relay ? d.status.replace(/^[\d.,]
 
 // ---------- Startseite ----------
 function homeHTML() {
+  // Aufbau wie die Startseite der myStrom-App: zuerst Szenen, Regeln, Home Guard, Verbrauch, Alarme, dann die Steckdosen.
+  // Steckdosen-Kacheln ohne Pfeil und ohne Statuszeile; Watt mit einer Nachkommastelle wie im Original.
   const hint = !store.get('swiped') && S.devices.length ? '<p class="hint">Kachel nach links oder rechts wischen schaltet · antippen öffnet die Funktionen</p>' : '';
-  const tile = (h, icon, label, sub = '') => `<button type="button" class="tile" data-go="${h}"><span class="ico">${icon}</span><span class="lb">${label}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</button>`;
-  const guardOn = S.devices.filter((d) => d.cfg.vacation.on).length;
-  const rulesOn = S.devices.reduce((a, d) => a + FEAT.filter(([k]) => k !== 'eval' && k !== 'alarms' && featInfo(d, k)[0]).length, 0);
+  const tile = (h, icon, label) => `<button type="button" class="tile" data-go="${h}"><span class="ico">${icon}</span><span class="lb">${label}</span></button>`;
   const total = S.devices.reduce((a, d) => a + d.w, 0);
+  const w1 = (w) => (w < 1000 ? `${w.toFixed(1)} W` : `${(w / 1000).toFixed(2)} kW`);
   return `<header class="hd"><span></span><b>myStrom</b><button type="button" class="ic" data-go="more" aria-label="Mehr">${I.menu}</button></header>
-    <div class="grid">
+    <div class="grid home">
+      ${tile('scenes', I.scenes, 'Szenen')}
+      ${tile('rules', I.rules, 'Regeln')}
+      ${tile('guard', I.guard, 'Home Guard')}
+      ${tile('energy', I.bolt, `<span class="dim">${pw(total)}</span><br>Verbrauch`)}
+      ${tile('alarms', I.bell, 'Alarme')}
       ${S.devices.map((d) => `<div class="tile dev ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-mac="${d.mac}">
         <div class="face">${d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : ''}${d.cfg.lock ? '<span class="lock" title="Tastensperre">🔒</span>' : ''}
-        <span class="ico">${devIcon(d)}</span><span class="lb">${d.relay ? `${pw(d.w)}<br>` : ''}${esc(d.name)}</span>
-        ${subOf(d) ? `<span class="sub">${esc(subOf(d))}</span>` : ''}
-        <span class="more" aria-hidden="true">›</span></div>
+        <span class="ico">${devIcon(d)}</span><span class="lb">${d.relay ? `${w1(d.w)}<br>` : ''}${esc(d.name)}</span>
+        ${d.online ? '' : '<span class="sub">Offline</span>'}</div>
         <button type="button" class="hit" data-swipe="${d.mac}" aria-label="${esc(d.name)}, ${d.relay ? 'an' : 'aus'}. Öffnen; Wischen oder Leertaste schaltet"></button></div>`).join('')}
-      ${tile('energy', I.bolt, `${pw(total)}<br>Verbrauch`)}
-      ${tile('scenes', I.scenes, 'Szenen')}
-      ${tile('guard', I.guard, 'Home Guard', guardOn ? `${guardOn} in Ferien` : '')}
-      ${tile('rules', I.rules, 'Regeln', rulesOn ? `${rulesOn} aktiv` : '')}
-      ${tile('alarms', I.bell, 'Alarme')}
       ${S.devices.length ? '' : tile('more', I.plug, 'Steckdose hinzufügen')}
     </div>${hint}`;
 }

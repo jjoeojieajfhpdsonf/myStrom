@@ -169,3 +169,11 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .tile .ico svg { max-height: 46px; width: auto; }
 .tile .lb { font-size: 14.5px; line-height: 1.25; }
 .tile .sub { font-size: 12px; }
+
+/* Startseite wie im Original: Kacheln 4:3, grössere Symbole und Schrift, Watt beim Verbrauch grau */
+.grid.home .tile { aspect-ratio: 4 / 3; gap: 6px; }
+.grid.home .tile .ico svg { height: 56px; width: auto; max-height: none; }
+.grid.home .tile .lb { font-size: 16px; line-height: 1.3; color: #ddd; }
+.grid.home .tile.on .lb { color: #fff; }
+.grid.home .tile .dim { color: #a8a8a8; }
+.grid.home .tile.dev .face { gap: 6px; }

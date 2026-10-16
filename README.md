@@ -17,6 +17,7 @@ Eigene App für die myStrom WiFi Switches im Heimnetz, im Aussehen der myStrom-A
 | Sonne | Bei Sonnenuntergang an und bei Sonnenaufgang aus, mit Verschiebung |
 | Timer | Nach dem Einschalten X Minuten an, dann aus |
 | Stromsparen | Bei Standby aus. Wieder an von Hand, um eine Uhrzeit oder nach X Stunden. |
+| Power Actions | Wenn über oder unter X Watt für Y Minuten: Mitteilung (z. B. „Waschmaschine fertig“), ausschalten oder eine andere Steckdose schalten |
 | Temperatur | Aus, wenn die Steckdose zu warm wird |
 
 - **Szenen:** mehrere Steckdosen mit einem Tipp schalten.

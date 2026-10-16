@@ -49,6 +49,8 @@ const q = {
   samplesAll: db.prepare('SELECT mac, ts, w, wh FROM samples WHERE ts >= ? AND ts < ? ORDER BY ts'),
   sumWh: db.prepare('SELECT COALESCE(SUM(wh), 0) AS wh FROM samples WHERE mac = ? AND ts >= ?'),
   sumWhAll: db.prepare('SELECT COALESCE(SUM(wh), 0) AS wh FROM samples WHERE ts >= ?'),
+  sumBetween: db.prepare('SELECT COALESCE(SUM(wh), 0) AS wh FROM samples WHERE mac = ? AND ts >= ? AND ts < ?'),
+  sumBetweenAll: db.prepare('SELECT COALESCE(SUM(wh), 0) AS wh FROM samples WHERE ts >= ? AND ts < ?'),
   firstTs: db.prepare('SELECT MIN(ts) AS ts FROM samples WHERE mac = ?'),
   onPowers: db.prepare('SELECT w FROM samples WHERE mac = ? AND ts >= ? AND relay = 1'),
   delSamples: db.prepare('DELETE FROM samples WHERE mac = ?'),
@@ -101,7 +103,8 @@ function sunTimes(day, lat = settings.lat, lon = settings.lon) {
 const DEFAULT_CFG = () => {
   const today = dayKey(Date.now());
   return {
-    name: '', room: '', icon: '', tcorr: 0, solar: false, lock: false,
+    name: '', room: '', icon: '', tcorr: 0, lock: false,
+    actions: [], // Power Actions: wenn über/unter X W, dann …
     schedule: { on: false, start: '07:00', end: '23:00', days: [1, 2, 3, 4, 5, 6, 0] },
     idle: { on: false, from: '23:00', to: '07:00', below: 25, mins: 10, backOn: true }, // nachts aus, wenn nicht mehr benutzt
     temp: { on: false, max: 45 },
@@ -118,6 +121,7 @@ function clean(def, val, key = '') {
   if (val === undefined || val === null) return def;
   if (typeof def === 'boolean') return Boolean(val);
   if (typeof def === 'number') { const n = Number(val), [lo, hi] = LIMITS[key] || [-1e6, 1e6]; return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : def; }
+  if (key === 'actions') return cleanActions(val);
   if (Array.isArray(def)) return Array.isArray(val) ? [...new Set(val.map(Number).filter((x) => Number.isInteger(x) && x >= 0 && x <= 6))] : def;
   if (typeof def === 'object') return Object.fromEntries(Object.entries(def).map(([k, d]) => [k, clean(d, val[k], k)]));
   const s = String(val).trim();
@@ -125,6 +129,22 @@ function clean(def, val, key = '') {
   if (/^\d{4}-\d{2}-\d{2}$/.test(def)) return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : def;
   if (key === 'back') return ['hand', 'time', 'after'].includes(s) ? s : def;
   return s.slice(0, 40);
+}
+// Power Actions prüfen: Bedingung (über/unter Watt, Mindestdauer) und was dann passiert
+const ACT_THEN = ['notify', 'off', 'other-on', 'other-off'];
+function cleanActions(list) {
+  if (!Array.isArray(list)) return [];
+  const num = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
+  return list.slice(0, 20).map((a) => ({
+    id: String(a?.id || crypto.randomUUID()).replace(/[^\w-]/g, '').slice(0, 24) || crypto.randomUUID().slice(0, 8),
+    on: a?.on !== false,
+    when: a?.when === 'below' ? 'below' : 'above',
+    watts: num(a?.watts, 0, 3600, 10),
+    mins: num(a?.mins, 0, 1440, 1),
+    then: ACT_THEN.includes(a?.then) ? a.then : 'notify',
+    target: /^[0-9A-Z]{12}$/.test(String(a?.target || '')) ? String(a.target) : '',
+    text: String(a?.text || '').trim().slice(0, 60),
+  }));
 }
 const isObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 const merge = (a, b) => (isObj(a) && isObj(b) ? Object.fromEntries([...new Set([...Object.keys(a), ...Object.keys(b)])].map((k) => [k, merge(a[k], b[k])])) : b === undefined ? a : b);
@@ -240,6 +260,11 @@ async function pollAll() {
   await Promise.all([...devices.values()].map(pollDevice));
   const prev = lastTick; lastTick = Date.now();
   for (const d of devices.values()) await runRules(d, prev, lastTick).catch((e) => console.error('Regeln', nameOf(d), e.message));
+  // Szenen zu festen Zeiten
+  const crossed = crossedFn(prev, lastTick);
+  for (const sc of meta('scenes', DEFAULT_SCENES)) {
+    if (sc.time?.on && sc.time.days.includes(weekday(lastTick)) && crossed(hm2min(sc.time.at))) await runScene(sc.id).catch((e) => console.error('Szene', sc.name, e.message));
+  }
 }
 
 // ---------- Regeln ----------
@@ -318,12 +343,35 @@ async function runRules(d, prev, now) {
   }
   // Timer: nach dem Einschalten eine bestimmte Zeit an
   if (c.timer.on && r.relay && r.onSince && now - r.onSince >= c.timer.mins * 60e3) await sw(false, `Timer ${c.timer.mins} min abgelaufen`);
+  // Power Actions: gilt die Bedingung lange genug, einmal auslösen; erst wieder, wenn sie zwischendurch nicht mehr galt.
+  // „Unter X W“ zählt erst, nachdem das Gerät darüber gelaufen ist; sonst meldete „Waschmaschine fertig“ auch ohne Waschgang.
+  r.acts ||= {};
+  for (const a of c.actions) {
+    if (!a.on) continue;
+    const st = (r.acts[a.id] ||= { since: null, armed: a.when === 'above', fired: false });
+    if (a.when === 'above') st.armed = true;
+    else if (r.w > a.watts) st.armed = true;
+    const cond = a.when === 'above' ? r.w > a.watts : r.w < a.watts;
+    if (cond && st.armed && !st.fired) {
+      st.since ||= now;
+      if (now - st.since >= a.mins * 60e3) { st.fired = true; if (a.when === 'below') st.armed = false; await runAction(d, a).catch((e) => console.error('Power Action:', e.message)); }
+    } else if (!cond) { st.since = null; st.fired = false; }
+  }
   // ungewöhnlicher Verbrauch: drei Messungen hintereinander deutlich über dem, was das Gerät sonst zieht
   const usual = usualMax(d.mac);
   if (c.alarms.unusual && usual != null && r.w > 20 && r.w > Math.max(usual * 1.5, usual + 30)) {
     r.highCount = (r.highCount || 0) + 1;
     if (r.highCount >= 3 && now - (r.unusualSent || 0) > 6 * 3600e3) { r.unusualSent = now; notify(d, 'unusual', `${nameOf(d)} zieht ${pw(r.w)}`, `Sonst höchstens etwa ${pw(usual)}.`); }
   } else r.highCount = 0;
+}
+
+async function runAction(d, a) {
+  const cond = `${a.when === 'below' ? 'unter' : 'über'} ${a.watts} W${a.mins ? ` seit ${a.mins} min` : ''}`;
+  if (a.then === 'notify') { notify(d, `action-${a.id}`, a.text || `${nameOf(d)}: ${a.when === 'below' ? 'fertig' : `über ${a.watts} W`}`, `Leistung ${cond}.`); return; }
+  if (a.then === 'off') { if (R(d.mac).relay) await setRelay(d.mac, false, `Power Action: ${cond}`); return; }
+  const t = devices.get(a.target), on = a.then === 'other-on';
+  if (!t || t.cfg.lock || !R(t.mac).online) return;
+  if (R(t.mac).relay !== on) await setRelay(t.mac, on, `Power Action von ${nameOf(d)} (${cond})`);
 }
 
 // ---------- Status für die App ----------
@@ -381,12 +429,45 @@ function apiTotals(mac) {
   const first = mac === 'all' ? null : q.firstTs.get(mac).ts;
   return { today: sinceWh(mac, dayStart(today)), week: sinceWh(mac, weekStart), month: sinceWh(mac, monthStart), year: sinceWh(mac, yearStart), all: sinceWh(mac, 0), since: first };
 }
-function csvExport(mac, from, to) {
+function apiBars(mac, period, ref) {
+  const pad = (n) => String(n).padStart(2, '0'), now = Date.now();
+  let buckets;
+  if (period === 'week') {
+    const wd = (new Date(`${ref}T12:00:00Z`).getUTCDay() + 6) % 7, start = addDays(ref, -wd);
+    buckets = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((label, i) => { const day = addDays(start, i); return { key: day, label, from: dayStart(day), to: dayStart(addDays(day, 1)) }; });
+  } else if (period === 'month') {
+    const ym = ref.slice(0, 7), [y, m] = ym.split('-').map(Number), n = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    buckets = Array.from({ length: n }, (_, i) => { const day = `${ym}-${pad(i + 1)}`; return { key: day, label: String(i + 1), from: dayStart(day), to: dayStart(addDays(day, 1)) }; });
+  } else {
+    const y = Number(ref.slice(0, 4));
+    buckets = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'].map((label, i) => ({ key: `${y}-${pad(i + 1)}`, label,
+      from: dayStart(`${y}-${pad(i + 1)}-01`), to: dayStart(i === 11 ? `${y + 1}-01-01` : `${y}-${pad(i + 2)}-01`) }));
+  }
+  const bars = buckets.map((b) => ({ key: b.key, label: b.label, wh: b.from > now ? null : (mac === 'all' ? q.sumBetweenAll.get(b.from, b.to) : q.sumBetween.get(mac, b.from, b.to)).wh }));
+  return { period, ref, bars, wh: bars.reduce((a, b) => a + (b.wh || 0), 0) };
+}
+// CSV: Rohdaten (alle 30 s) oder zusammengefasst je 5 Minuten, Stunde oder Tag (Mittelwert Leistung, Summe Energie)
+function csvExport(mac, from, to, res = 'raw') {
   const a = dayStart(from), b = dayStart(addDays(to, 1));
   const rows = mac === 'all' ? q.samplesAll.all(a, b) : q.samples.all(mac, a, b).map((s) => ({ ...s, mac }));
   const names = Object.fromEntries([...devices.values()].map((d) => [d.mac, nameOf(d)]));
-  const lines = ['Zeit;Gerät;Leistung W;Energie Wh'];
-  for (const s of rows) lines.push(`${dayKey(s.ts)} ${new Intl.DateTimeFormat('en-GB', { timeZone: CFG.tz, timeStyle: 'medium', hourCycle: 'h23' }).format(s.ts)};${names[s.mac] || s.mac};${s.w.toFixed(1)};${(s.wh || 0).toFixed(3)}`);
+  const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: CFG.tz, timeStyle: 'medium', hourCycle: 'h23' });
+  const when = (ts) => `${dayKey(ts)} ${fmt.format(ts)}`;
+  if (res === 'raw') {
+    const lines = ['Zeit;Gerät;Leistung W;Energie Wh'];
+    for (const s of rows) lines.push(`${when(s.ts)};${names[s.mac] || s.mac};${s.w.toFixed(1)};${(s.wh || 0).toFixed(3)}`);
+    return lines.join('\n');
+  }
+  const step = { '5min': 300e3, hour: 3600e3 }[res];
+  const groups = new Map();
+  for (const s of rows) {
+    const b = step ? Math.floor(s.ts / step) * step : dayStart(dayKey(s.ts)), k = `${b}|${s.mac}`, g = groups.get(k) || { b, mac: s.mac, w: 0, n: 0, wh: 0 };
+    g.w += s.w; g.n++; g.wh += s.wh || 0; groups.set(k, g);
+  }
+  const lines = [`${res === 'day' ? 'Tag' : 'Zeit'};Gerät;Leistung Ø W;Energie Wh`];
+  for (const g of [...groups.values()].sort((x, y) => x.b - y.b || x.mac.localeCompare(y.mac))) {
+    lines.push(`${res === 'day' ? dayKey(g.b) : when(g.b).slice(0, 16)};${names[g.mac] || g.mac};${(g.w / g.n).toFixed(1)};${g.wh.toFixed(2)}`);
+  }
   return lines.join('\n');
 }
 
@@ -397,6 +478,7 @@ function cleanScenes(list) {
   return list.slice(0, 30).map((s) => ({
     id: String(s.id || crypto.randomUUID()).slice(0, 40), name: String(s.name || 'Szene').trim().slice(0, 30) || 'Szene',
     actions: Object.fromEntries(Object.entries(s.actions || {}).filter(([mac, a]) => devices.has(mac) && ['on', 'off'].includes(a))),
+    time: clean({ on: false, at: '23:00', days: [1, 2, 3, 4, 5, 6, 0] }, s.time || {}),
   }));
 }
 async function runScene(id) {
@@ -533,13 +615,19 @@ const server = http.createServer(async (req, res) => {
       if (!isDay(day) || (mac !== 'all' && !devices.has(mac))) return json({ error: 'mac und day (JJJJ-MM-TT) angeben' }, 400);
       return json(apiCurve(mac, day));
     }
+    if (p === '/api/bars') {
+      const mac = sp.get('mac') || 'all', period = sp.get('period'), ref = sp.get('ref') || dayKey(Date.now());
+      if (!['week', 'month', 'year'].includes(period) || !isDay(ref) || (mac !== 'all' && !devices.has(mac))) return json({ error: 'period (week|month|year), ref (JJJJ-MM-TT) und mac angeben' }, 400);
+      return json(apiBars(mac, period, ref));
+    }
     if (p === '/api/totals') { const mac = sp.get('mac') || 'all'; return json(apiTotals(mac)); }
     if (p === '/api/events') { const mac = sp.get('mac'); return json(q.events.all(mac, mac, Math.min(200, Number(sp.get('n') || 50)))); }
     if (p === '/api/export.csv') {
-      const mac = sp.get('mac') || 'all', from = sp.get('from'), to = sp.get('to');
+      const mac = sp.get('mac') || 'all', from = sp.get('from'), to = sp.get('to'), step = ['raw', '5min', 'hour', 'day'].includes(sp.get('res')) ? sp.get('res') : 'raw';
       if (!isDay(from) || !isDay(to)) return json({ error: 'from und to als JJJJ-MM-TT angeben' }, 400);
-      res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="mystrom-${from}-${to}.csv"` });
-      return res.end(`﻿${csvExport(mac, from, to)}`);
+      const name = mac === 'all' ? 'alle' : nameOf(devices.get(mac) || { cfg: {}, mac }).replace(/[^\w-]+/g, '_');
+      res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="steckdosen-${name}-${from}-${to}-${step === 'raw' ? '30s' : step}.csv"` });
+      return res.end(`\ufeff${csvExport(mac, from, to, step)}`);
     }
     if (p === '/api/scenes' && req.method === 'PUT') { const s = cleanScenes((await readBody(req)).scenes); setMeta('scenes', s); return json(s); }
     const sm = /^\/api\/scenes\/([\w-]+)\/run$/.exec(p);
@@ -547,6 +635,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/settings' && req.method === 'PUT') {
       const b = (await readBody(req)).settings || {};
       let next = { ...settings, ...clean({ price: settings.price, lat: settings.lat, lon: settings.lon }, b) };
+      if (Array.isArray(b.order)) next.order = [...new Set(b.order.map(String).filter((k) => /^[\w-]{1,24}$/.test(k)))].slice(0, 60);
       if (typeof b.place === 'string' && b.place.trim()) {
         try { next = { ...next, ...(await geocode(b.place.trim().slice(0, 80))) }; } catch (e) { return json({ error: e.name === 'TimeoutError' ? 'Die Ortssuche antwortet nicht.' : e.message }, 422); }
       } else if (b.lat != null && b.lon != null) next.place = b.place ?? `${Number(b.lat).toFixed(2)}, ${Number(b.lon).toFixed(2)}`;

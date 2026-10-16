@@ -143,3 +143,10 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline-color: var(
 .ls.week .row.wday input[type="time"] { padding-left: 10px; padding-right: 10px; text-align: center; font-variant-numeric: tabular-nums; }
 .ls.week .row.wday input[type="time"]::-webkit-calendar-picker-indicator { display: none; }
 .ls.week .row.wday .chip[aria-pressed="true"] { background: var(--on-chip); color: var(--on-chiptxt); box-shadow: inset 0 0 0 1px var(--on-line); font-weight: 600; }
+
+/* − / + statt Zahlenfeld */
+.stp { display: inline-flex; align-items: center; gap: 4px; flex: none; background: rgb(255 255 255 / .06); border-radius: 12px; padding: 3px; }
+.stp button { width: 36px; height: 34px; border-radius: 9px; font-size: 20px; line-height: 1; color: var(--fg); background: rgb(255 255 255 / .06); }
+.stp button:active:not(:disabled) { background: rgb(255 255 255 / .14); }
+.stp button:disabled { opacity: .3; }
+.stp output { min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; font-size: 15.5px; white-space: nowrap; }

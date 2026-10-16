@@ -270,6 +270,28 @@ const row = (label, right, sub = '', attrs = '') => `<${attrs ? `button type="bu
 const inp = (path, type, value, extra = '') => `<input type="${type}" data-in="${path}" value="${esc(value)}" ${extra}>`;
 const lrow = (label, input, sub = '') => `<label class="row"><span class="tx"><b>${label}</b>${sub ? `<span>${sub}</span>` : ''}</span>${input}</label>`;
 const master = (d, k, label = 'Aktiv') => `<div class="row master"><span class="tx"><b>${label}</b></span>${sw(`${k}.on`, d.cfg[k].on, label)}</div>`;
+
+// Zahlen mit − / + statt Freitext: Schritte aus einer Liste sinnvoller Werte, Einheit gleich in der Anzeige
+const dur = (m) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m / 60} h`);
+const DURS = [1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 300, 360, 480, 600, 720, 960, 1200, 1440];
+const WATTS = [0, 0.5, 1, 2, 3, 5, 8, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 300, 500, 800, 1000, 1500, 2000, 3000];
+const range = (a, b, st) => Array.from({ length: Math.round((b - a) / st) + 1 }, (_, i) => Math.round((a + i * st) * 10) / 10);
+const STEPS = {
+  dur: [DURS, dur], dur240: [DURS.filter((m) => m <= 240), dur], dur0: [[0, ...DURS], (m) => (m ? dur(m) : 'sofort')],
+  watt: [WATTS, (w) => `${String(w).replace('.', ',')} W`], watt1: [WATTS.filter((w) => w >= 1), (w) => `${w} W`],
+  offs: [[-180, -120, -90, -60, -45, -30, -20, -15, -10, -5, 0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180], (m) => (m ? `${m > 0 ? '+' : '−'}${dur(Math.abs(m))}` : 'genau')],
+  hours: [[...range(1, 12, 1), 18, 24, 36, 48], (h) => `${h} h`],
+  temp: [range(20, 90, 5), (t) => `${t} °C`],
+  tcorr: [range(-10, 10, 0.5), (t) => `${t > 0 ? '+' : t < 0 ? '−' : ''}${String(Math.abs(t)).replace('.', ',')} °C`],
+};
+// path: Einstellung (z. B. timer.mins) oder a:feld für die gerade offene Power Action
+const stepper = (path, list, v, label) => {
+  const [vals, fmt] = STEPS[list];
+  return `<span class="stp" role="group" aria-label="${esc(label)}"><button type="button" data-step="${path}" data-list="${list}" data-dir="-1" aria-label="weniger" ${v <= vals[0] ? 'disabled' : ''}>−</button>`
+    + `<output>${fmt(v)}</output><button type="button" data-step="${path}" data-list="${list}" data-dir="1" aria-label="mehr" ${v >= vals[vals.length - 1] ? 'disabled' : ''}>+</button></span>`;
+};
+const srow = (label, ctrl, sub = '') => `<div class="row"><span class="tx"><b>${label}</b>${sub ? `<span>${sub}</span>` : ''}</span>${ctrl}</div>`;
+const nextStep = (list, v, dir) => { const vals = STEPS[list][0]; return dir > 0 ? vals.find((x) => x > v) ?? vals[vals.length - 1] : [...vals].reverse().find((x) => x < v) ?? vals[0]; };
 const val = (t) => `<span class="val">${t}</span>`;
 const chev = (t = '') => `<span class="val">${t} ›</span>`;
 
@@ -384,8 +406,8 @@ function actionsHTML(d, id) {
   const others = S.devices.filter((x) => x.mac !== d.mac);
   return head('Power Action', `dev/${d.mac}/actions`) + `<div class="${a.on ? 'ls' : 'ls dim'}"><div class="row master"><span class="tx"><b>Aktiv</b></span><button type="button" class="sw" data-atoggle="${a.id}" aria-pressed="${a.on}" aria-label="Aktiv"></button></div></div>
     <p class="sec">Wenn die Leistung</p>${chips('when', [['above', 'über'], ['below', 'unter']])}
-    <div class="ls">${lrow('Schwelle', `<input type="number" data-ain="watts" value="${a.watts}" min="0" max="3600" step="0.5" inputmode="decimal">`, `Watt; jetzt ${pw(d.w)}`)}
-      ${lrow('Mindestens', `<input type="number" data-ain="mins" value="${a.mins}" min="0" max="1440" inputmode="numeric">`, 'Minuten am Stück')}</div>
+    <div class="ls">${srow('Schwelle', stepper('a:watts', 'watt', a.watts, 'Schwelle'), `jetzt ${pw(d.w)}`)}
+      ${srow('Mindestens', stepper('a:mins', 'dur0', a.mins, 'Mindestens'), 'am Stück')}</div>
     <p class="sec">Dann</p>${chips('then', others.length ? ACT_THEN : ACT_THEN.slice(0, 2))}
     ${a.then.startsWith('other') ? `<p class="sec">Welche Steckdose</p>${chips('target', others.map((x) => [x.mac, x.name]))}` : ''}
     ${a.then === 'notify' ? `<div class="ls">${lrow('Text', `<input type="text" data-ain="text" value="${esc(a.text)}" placeholder="${esc(d.name)} ist fertig" maxlength="60" style="max-width:200px">`)}</div>` : ''}
@@ -412,8 +434,8 @@ function featureHTML(d, k, sub) {
     }
     case 'idle': return head + `<p class="intro">Im Zeitfenster schaltet die Steckdose ab, sobald so wenig Strom fliesst, dass niemand mehr dran arbeitet. Arbeitest du noch (PC und Bildschirm ziehen mehr), wartet sie.</p>
       <div class="${dim(c.idle.on)}">${master(d, 'idle')}${lrow('Ab', inp('idle.from', 'time', c.idle.from))}${lrow('Bis', inp('idle.to', 'time', c.idle.to))}
-        ${lrow('Aus unter', inp('idle.below', 'number', c.idle.below, 'min="1" max="3000" inputmode="numeric"'), 'Watt; jetzt ' + pw(d.w))}
-        ${lrow('Wenn so lange', inp('idle.mins', 'number', c.idle.mins, 'min="1" max="240" inputmode="numeric"'), 'Minuten am Stück')}
+        ${srow('Aus unter', stepper('idle.below', 'watt1', c.idle.below, 'Aus unter'), 'jetzt ' + pw(d.w))}
+        ${srow('Wenn so lange', stepper('idle.mins', 'dur240', c.idle.mins, 'Wenn so lange'), 'am Stück')}
         <div class="row"><span class="tx"><b>Um ${c.idle.to} wieder an</b><span>nur wenn diese Regel ausgeschaltet hat</span></span>${sw('idle.backOn', c.idle.backOn, 'Morgens wieder an')}</div></div>
       ${c.idle.on ? `<p class="note"><b>Jetzt:</b> ${esc(d.status)}</p>` : ''}
       <p class="note">Tipp: Schau abends unter Auswertung, wie viel der Schreibtisch im Standby zieht, und setze die Schwelle etwas darüber.</p>`;
@@ -429,24 +451,24 @@ function featureHTML(d, k, sub) {
     }
     case 'sun': return head + `<p class="intro">Heute bei dir: Sonnenaufgang ${S.sun?.rise || '–'}, Sonnenuntergang ${S.sun?.set || '–'}${S.settings.place ? ` (${esc(S.settings.place)})` : ''}.</p>
       <div class="${dim(c.sun.on)}"><div class="row master"><span class="tx"><b>Bei Sonnenuntergang an</b></span>${sw('sun.on', c.sun.on, 'Bei Sonnenuntergang an')}</div>
-        ${lrow('Verschieben', inp('sun.onOffset', 'number', c.sun.onOffset, 'min="-180" max="180" step="5"'), 'Minuten, minus = früher')}</div>
+        ${srow('Verschieben', stepper('sun.onOffset', 'offs', c.sun.onOffset, 'Einschalten verschieben'), '− früher, + später')}</div>
       <div class="${dim(c.sun.off)}"><div class="row master"><span class="tx"><b>Bei Sonnenaufgang aus</b></span>${sw('sun.off', c.sun.off, 'Bei Sonnenaufgang aus')}</div>
-        ${lrow('Verschieben', inp('sun.offOffset', 'number', c.sun.offOffset, 'min="-180" max="180" step="5"'), 'Minuten, minus = früher')}</div>`;
+        ${srow('Verschieben', stepper('sun.offOffset', 'offs', c.sun.offOffset, 'Ausschalten verschieben'), '− früher, + später')}</div>`;
     case 'timer': return head + `<p class="intro">Nach jedem Einschalten bleibt ${esc(d.name)} so lange an und geht dann von selbst aus, egal ob in der App oder am Gerät eingeschaltet.</p>
       <div class="${dim(c.timer.on)}">${master(d, 'timer')}</div>
       <div class="chips">${[15, 30, 60, 120, 240].map((m) => `<button type="button" class="chip" data-set="timer.mins" data-v="${m}" aria-pressed="${c.timer.mins === m}">${m < 60 ? `${m} min` : `${m / 60} h`}</button>`).join('')}</div>
-      <div class="ls">${lrow('Eigene Dauer', inp('timer.mins', 'number', c.timer.mins, 'min="1" max="1440" inputmode="numeric"'), 'Minuten')}</div>`;
+      <div class="ls">${srow('Eigene Dauer', stepper('timer.mins', 'dur', c.timer.mins, 'Eigene Dauer'))}</div>`;
     case 'saver': {
       const s = c.saver;
       return head + `<p class="intro">Hängt das Gerät nur im Standby, schaltet die Steckdose es ab. Ist sie aus, fliesst kein Strom mehr, darum kann sie nicht selbst merken, wann du das Gerät wieder brauchst. Lege fest, wann es wieder angeht.</p>
-      <div class="${dim(s.on)}">${master(d, 'saver')}${lrow('Standby unter', inp('saver.below', 'number', s.below, 'min="0" max="3000" step="0.5"'), 'Watt; jetzt ' + pw(d.w))}
-        ${lrow('Länger als', inp('saver.mins', 'number', s.mins, 'min="1" max="1440"'), 'Minuten')}</div>
+      <div class="${dim(s.on)}">${master(d, 'saver')}${srow('Standby unter', stepper('saver.below', 'watt', s.below, 'Standby unter'), 'jetzt ' + pw(d.w))}
+        ${srow('Länger als', stepper('saver.mins', 'dur', s.mins, 'Länger als'))}</div>
       <p class="sec">Wieder an</p>
       <div class="chips">${[['hand', 'Von Hand'], ['time', 'Um eine Uhrzeit'], ['after', 'Nach Stunden']].map(([v, l]) => `<button type="button" class="chip" data-set="saver.back" data-v="${v}" aria-pressed="${s.back === v}">${l}</button>`).join('')}</div>
-      ${s.back === 'time' ? `<div class="ls">${lrow('Um', inp('saver.at', 'time', s.at))}</div>` : s.back === 'after' ? `<div class="ls">${lrow('Nach', inp('saver.hours', 'number', s.hours, 'min="1" max="48"'), 'Stunden')}</div>` : '<p class="note">Erst wieder an, wenn du sie in der App, mit einer Szene oder am Knopf der Steckdose einschaltest.</p>'}`;
+      ${s.back === 'time' ? `<div class="ls">${lrow('Um', inp('saver.at', 'time', s.at))}</div>` : s.back === 'after' ? `<div class="ls">${srow('Nach', stepper('saver.hours', 'hours', s.hours, 'Nach'))}</div>` : '<p class="note">Erst wieder an, wenn du sie in der App, mit einer Szene oder am Knopf der Steckdose einschaltest.</p>'}`;
     }
     case 'temp': return head + `<p class="intro">Die Steckdose misst ihre eigene Temperatur, jetzt ${d.temp != null ? `${d.temp.toFixed(1)} °C` : '–'}. Wird sie zu warm, schaltet sie ab.</p>
-      <div class="${dim(c.temp.on)}">${master(d, 'temp', 'Bei Hitze ausschalten')}${lrow('Aus über', inp('temp.max', 'number', c.temp.max, 'min="20" max="90"'), '°C')}</div>`;
+      <div class="${dim(c.temp.on)}">${master(d, 'temp', 'Bei Hitze ausschalten')}${srow('Aus über', stepper('temp.max', 'temp', c.temp.max, 'Aus über'))}</div>`;
     case 'alarms': return head + `<p class="intro">Mitteilung aufs Handy, wenn bei ${esc(d.name)} etwas passiert. ${S.pushSubs ? '' : '<a href="#alarms">Mitteilungen zuerst erlauben ›</a>'}</p>
       <div class="ls">${[['offline', 'Offline', 'keine Antwort seit 3 Minuten'], ['unusual', 'Ungewöhnlicher Verbrauch', 'deutlich mehr als sonst'], ['switchedOn', 'Eingeschaltet', 'am Gerät oder von einer Regel'], ['hot', 'Zu warm', `über ${c.temp.on ? c.temp.max : 45} °C`]]
         .map(([key, l, sub]) => `<div class="row"><span class="tx"><b>${l}</b><span>${sub}</span></span>${sw(`alarms.${key}`, c.alarms[key], l)}</div>`).join('')}</div>`;
@@ -456,7 +478,7 @@ function featureHTML(d, k, sub) {
       <div class="ls">${lrow('Name', `<input type="text" data-in="name" value="${esc(d.cfg.name)}" placeholder="${esc(d.name)}" maxlength="40">`)}
         ${row('Raum', chev(esc(d.cfg.room || 'keiner')), '', `data-go="dev/${d.mac}/room"`)}
         ${row('Symbol', chev(esc(iconName(d))), '', `data-go="dev/${d.mac}/icon"`)}
-        ${lrow('Temperatur-Korrektur', inp('tcorr', 'number', c.tcorr, 'step="0.5" min="-10" max="10"'), '°C, wird zur Messung addiert')}
+        ${srow('Temperatur-Korrektur', stepper('tcorr', 'tcorr', c.tcorr, 'Temperatur-Korrektur'), 'wird zur Messung addiert')}
         ${row('Technische Details', chev(), '', `data-go="dev/${d.mac}/tech"`)}</div>
       <div class="ls"><div class="row"><span class="tx"><b>Tastensperre</b><span>in der App nicht mehr schaltbar</span></span>${sw('lock', c.lock, 'Tastensperre')}</div></div>
       <button type="button" class="btn danger" data-remove="${d.mac}">Steckdose entfernen</button>`;
@@ -993,7 +1015,11 @@ app.addEventListener('click', async (e) => {
     el.setAttribute('aria-pressed', on); haptic();
     saveCfg(mac, patchOf(p, on));
   } else if ((el = at('[data-set]'))) haptic(), saveCfg(r1, patchOf(el.dataset.set, /^\d+$/.test(el.dataset.v) ? Number(el.dataset.v) : el.dataset.v));
-  else if ((el = at('[data-day]'))) {
+  else if ((el = at('[data-step]'))) {
+    haptic(); const p = el.dataset.step, dir = Number(el.dataset.dir);
+    if (p.startsWith('a:')) { const id = route()[3], a = dev(r1).cfg.actions.find((x) => x.id === id), k = p.slice(2); updAct(r1, id, { [k]: nextStep(el.dataset.list, a[k], dir) }); }
+    else saveCfg(r1, patchOf(p, nextStep(el.dataset.list, p.split('.').reduce((o, k) => o[k], dev(r1).cfg), dir)));
+  } else if ((el = at('[data-day]'))) {
     const n = Number(el.dataset.day), days = dev(r1).cfg.schedule.days;
     saveCfg(r1, { schedule: { days: days.includes(n) ? days.filter((x) => x !== n) : [...days, n] } });
   } else if ((el = at('[data-dayshift]'))) { view.day = shiftPeriod(view.period, view.day, Number(el.dataset.dayshift)); if (view.day > S.today) view.day = S.today; render(); }

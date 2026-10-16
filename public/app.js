@@ -349,7 +349,7 @@ function deviceHTML(d) {
   return HD(esc(d.name), 'home', `<button type="button" class="ic" data-go="dev/${d.mac}/settings" aria-label="Einstellungen">${I.gear}</button>`, esc(d.cfg.room))
     + `<div class="grid">
       <button type="button" class="tile devtgl ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-devtoggle="${d.mac}" role="switch" aria-checked="${d.relay}" aria-label="${esc(d.name)}">
-        <span class="ico">${I.toggle(d.relay)}</span><span class="lb">${d.relay ? `${pw(d.w)} · An` : 'Aus'}</span>${subOf(d) ? `<span class="sub">${esc(subOf(d))}</span>` : ''}</button>
+        <span class="ico">${I.toggle(d.relay)}</span><span class="lb">${d.relay ? `${pw(d.w)} · An` : 'Aus'}</span><span class="sub">${esc(subOf(d)) || '&nbsp;'}</span></button>
       ${FEAT.map(([k, ic, l]) => { const [on, txt] = featInfo(d, k); return `<button type="button" class="tile feat ${on ? 'act' : ''}" data-go="dev/${d.mac}/${k}"><span class="ico">${I[ic]}</span><span class="lb">${l}</span><span class="sub">${on || k === 'eval' ? esc(txt) : 'aus'}</span></button>`; }).join('')}
     </div>`;
 }
@@ -822,21 +822,31 @@ app.addEventListener('pointermove', (e) => {
     swipe.blocked = d.cfg.lock || !d.online;
     if (!swipe.blocked) nextPanel(swipe.tile, !d.relay, d.name);
   }
-  // gesperrt oder offline: nur ein kurzes, gebremstes Mitgehen
-  swipe.dx = swipe.blocked ? Math.sign(dx) * Math.min(24, Math.abs(dx) / 4) : dx;
-  place(swipe.tile, swipe.dx, false);
+  // gesperrt oder offline: nur ein kurzes, gebremstes Mitgehen; sonst höchstens eine Kachelbreite, kurz vor dem Ende gebremst
+  const w = swipe.tile.offsetWidth, a = Math.abs(dx), soft = w * 0.85;
+  const x = swipe.blocked ? Math.sign(dx) * Math.min(24, a / 4) : Math.sign(dx) * Math.min(w, a < soft ? a : soft + (a - soft) * 0.3);
+  // Geschwindigkeit (px/ms, geglättet) für schnelles Wischen
+  if (swipe.lt) swipe.v = 0.6 * (swipe.v || 0) + 0.4 * ((x - swipe.dx) / Math.max(1, e.timeStamp - swipe.lt));
+  swipe.lt = e.timeStamp; swipe.dx = x;
+  place(swipe.tile, x, false);
   const past = !swipe.blocked && Math.abs(swipe.dx) >= swipe.tile.offsetWidth * 0.4;
   if (past !== !!swipe.past) { swipe.past = past; if (navigator.vibrate) navigator.vibrate(past ? 12 : 6); }
 });
-const endSwipe = () => {
+const snapBack = (s) => { s.busy = true; place(s.tile, 0, true); setTimeout(() => { s.tile.querySelector('.next')?.remove(); swipe = null; render(); }, 230); };
+const endSwipe = (e) => {
   if (!swipe || swipe.busy) return;
   const s = swipe;
   if (!s.live) { swipe = null; return; } // war ein Tippen
   swiped = Date.now();
+  // übernimmt der Browser die Geste (z. B. zum Scrollen), nie schalten, sondern zurückfedern
+  if (e?.type === 'pointercancel') { snapBack(s); return; }
   const d = dev(s.b.dataset.swipe), w = s.tile.offsetWidth;
   if (s.blocked) { place(s.tile, 0, true); swipe = null; shake(s.tile); haptic([8, 60, 8]); toast(d.cfg.lock ? `${d.name}: Tastensperre ist an` : `${d.name} ist nicht erreichbar`, !d.cfg.lock); return; }
-  if (Math.abs(s.dx) >= w * 0.4) { s.busy = true; store.set('swiped', '1'); haptic(); flip(s.tile, d, Math.sign(s.dx)); }
-  else { s.busy = true; place(s.tile, 0, true); setTimeout(() => { s.tile.querySelector('.next')?.remove(); swipe = null; render(); }, 230); }
+  // weit genug gezogen, oder kurz und schnell in dieselbe Richtung geschnippt (Finger zuletzt noch in Bewegung)
+  const moving = e && s.lt && e.timeStamp - s.lt < 90, v = moving ? s.v || 0 : 0;
+  const flick = Math.abs(v) > 0.45 && Math.sign(v) === Math.sign(s.dx) && Math.abs(s.dx) > w * 0.12;
+  if (Math.abs(s.dx) >= w * 0.4 || flick) { s.busy = true; store.set('swiped', '1'); haptic(); flip(s.tile, d, Math.sign(s.dx)); }
+  else snapBack(s);
 };
 app.addEventListener('pointerup', endSwipe);
 app.addEventListener('pointercancel', endSwipe);

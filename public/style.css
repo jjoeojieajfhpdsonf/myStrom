@@ -192,3 +192,7 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .order .oico svg { width: 30px; height: 30px; }
 .order .tx { flex: 1; }
 .handle { width: 44px; height: 44px; display: grid; place-items: center; font-size: 22px; color: var(--mut); touch-action: none; cursor: grab; }
+
+/* Schalter-Kachel: feste Zeilen, damit der Schalter bei An/Aus nicht nach oben oder unten springt */
+.tile.devtgl { grid-template-rows: auto auto 2.6em; }
+.tile.devtgl .sub { align-self: start; }

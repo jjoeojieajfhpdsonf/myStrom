@@ -45,7 +45,7 @@ const FEAT = [
   ['sun', 'sun', 'Sonne'], ['timer', 'timer', 'Timer'], ['saver', 'leaf', 'Stromsparen'],
   ['temp', 'temp', 'Temperatur'], ['alarms', 'bell', 'Alarme'], ['eval', 'evals', 'Auswertung'],
 ];
-const FTITLE = { schedule: 'Zeitplan', idle: 'Nachts aus, wenn nicht benutzt', vacation: 'Ferienmodus', sun: 'Sonnenauf- und -untergang', timer: 'Timer', saver: 'Stromsparen',
+const FTITLE = { schedule: 'Zeitplan', idle: 'Nachts aus', vacation: 'Ferienmodus', sun: 'Sonne', timer: 'Timer', saver: 'Stromsparen',
   temp: 'Temperatur', alarms: 'Alarme', eval: 'Auswertung', settings: 'Einstellungen', tech: 'Technische Details', room: 'Raum wählen', roomnew: 'Eigener Raum', icon: 'Symbol wählen', actions: 'Power Actions' };
 const RI = (d) => `<svg viewBox="0 0 64 64" width="58" height="58" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">${d}</svg>`;
 const ROOM_ICON = {
@@ -278,7 +278,7 @@ const subOf = (d) => (!d.online ? d.status : d.relay ? d.status.replace(/^[\d.,]
 
 // ---------- Startseite ----------
 // Reihenfolge der Kacheln: gespeicherte zuerst, neue (z. B. eine neue Steckdose) hinten an
-const HOME_KEYS = [['scenes', 'Szenen', 'scenes'], ['rules', 'Regeln', 'rules'], ['guard', 'Home Guard', 'guard'], ['energy', 'Verbrauch', 'bolt'], ['alarms', 'Alarme', 'bell']];
+const HOME_KEYS = [['scenes', 'Szenen', 'scenes'], ['rules', 'Regeln', 'rules'], ['guard', 'Ferien', 'beach'], ['energy', 'Verbrauch', 'bolt'], ['alarms', 'Alarme', 'bell']];
 function homeOrder() {
   const all = [...HOME_KEYS.map(([k]) => k), ...S.devices.map((d) => d.mac)], o = (S.settings.order || []).filter((k) => all.includes(k));
   return [...o, ...all.filter((k) => !o.includes(k))];
@@ -323,7 +323,7 @@ app.addEventListener('keydown', (e) => {
   keys.splice(i, 1); keys.splice(j, 0, k); saveOrder(keys).then(() => $(`[data-okey="${k}"] [data-handle]`)?.focus());
 });
 function homeHTML() {
-  // Aufbau wie die Startseite der myStrom-App: zuerst Szenen, Regeln, Home Guard, Verbrauch, Alarme, dann die Steckdosen.
+  // Aufbau wie die Startseite der myStrom-App: zuerst Szenen, Regeln, Ferien (Home Guard), Verbrauch, Alarme, dann die Steckdosen.
   // Steckdosen-Kacheln ohne Pfeil und ohne Statuszeile; Watt mit einer Nachkommastelle wie im Original.
   const hint = '';
   const tile = (h, icon, label) => `<button type="button" class="tile" data-go="${h}" data-okey="${h}"><span class="ico">${icon}</span><span class="lb">${label}</span></button>`;
@@ -333,7 +333,7 @@ function homeHTML() {
   return `${editHome ? '<header class="hd"><span></span><b>Anordnen</b><button type="button" class="ic done" data-editdone="1">Fertig</button></header>'
       : `<header class="hd"><span></span><b>myStrom</b><button type="button" class="ic" data-go="more" aria-label="Mehr">${I.menu}</button></header>`}
     <div class="grid home ${editHome ? 'editing' : ''}">
-      ${(T.scenes = tile('scenes', I.scenes, 'Szenen'), T.rules = tile('rules', I.rules, 'Regeln'), T.guard = tile('guard', I.guard, 'Home Guard'),
+      ${(T.scenes = tile('scenes', I.scenes, 'Szenen'), T.rules = tile('rules', I.rules, 'Regeln'), T.guard = tile('guard', I.beach, 'Ferien'),
         T.energy = tile('energy', I.bolt, `<span class="dim">${pw(total)}</span><br>Verbrauch`), T.alarms = tile('alarms', I.bell, 'Alarme'), '')}
       ${S.devices.map((d) => (T[d.mac] = `<div class="tile dev ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-mac="${d.mac}" data-okey="${d.mac}">
         <div class="face">${d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : ''}${d.cfg.lock ? '<span class="lock" title="Tastensperre">🔒</span>' : ''}
@@ -688,9 +688,9 @@ function sceneHTML(id) {
 }
 const saveScenes = async () => { try { S.scenes = await api('api/scenes', { method: 'PUT', body: JSON.stringify({ scenes: S.scenes }) }); render(); } catch (e) { toast(e.message, true); } };
 
-// ---------- Home Guard, Regeln, Alarme, Mehr ----------
+// ---------- Ferien (alle Steckdosen), Regeln, Alarme, Mehr ----------
 function guardHTML() {
-  return HD('Home Guard', 'home') + '<p class="intro">Während deiner Ferien schalten die gewählten Steckdosen morgens und abends zu wechselnden Zeiten, damit das Haus bewohnt wirkt.</p>'
+  return HD('Ferien', 'home') + '<p class="intro">Ferienmodus aller Steckdosen auf einen Blick. Eingeschaltet geht eine Steckdose in den Ferien morgens und abends zu wechselnden Zeiten an, damit das Haus bewohnt wirkt.</p>'
     + `<div class="ls">${S.devices.map((d) => { const v = d.cfg.vacation, today = d.vacationToday.map((s) => `${s.key} ${s.start}`).join(', ');
       return `<div class="row"><button type="button" class="tx" data-go="dev/${d.mac}/vacation" style="text-align:left;flex:1"><b>${esc(d.name)} ›</b><span>${v.on ? `${dShort(v.from)}–${dShort(v.to)}${today ? ` · heute ${today}` : ''}` : 'aus'}</span></button>${sw(`${d.mac}:vacation.on`, v.on, `Ferien ${d.name}`)}</div>`; }).join('')}</div>`;
 }

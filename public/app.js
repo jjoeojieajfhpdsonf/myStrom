@@ -325,7 +325,7 @@ app.addEventListener('keydown', (e) => {
 function homeHTML() {
   // Aufbau wie die Startseite der myStrom-App: zuerst Szenen, Regeln, Home Guard, Verbrauch, Alarme, dann die Steckdosen.
   // Steckdosen-Kacheln ohne Pfeil und ohne Statuszeile; Watt mit einer Nachkommastelle wie im Original.
-  const hint = !store.get('swiped') && S.devices.length ? '<p class="hint">Kachel nach links oder rechts wischen schaltet · antippen öffnet die Funktionen</p>' : '';
+  const hint = '';
   const tile = (h, icon, label) => `<button type="button" class="tile" data-go="${h}"><span class="ico">${icon}</span><span class="lb">${label}</span></button>`;
   const T = {};
   const total = S.devices.reduce((a, d) => a + d.w, 0);
@@ -345,11 +345,13 @@ function homeHTML() {
 }
 
 // ---------- Gerät ----------
+// Steckdose als Linien-Symbol wie die übrigen Symbole; die LED unten zeigt den Zustand (grün an, rot aus, grau offline)
+const sockIcon = (d) => `<svg viewBox="0 0 64 64" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="18" y="5" width="28" height="54" rx="13"/><circle cx="32" cy="24" r="9"/><circle cx="28.5" cy="23" r="1.3" fill="currentColor"/><circle cx="35.5" cy="23" r="1.3" fill="currentColor"/><circle cx="32" cy="28" r="1.3" fill="currentColor"/><path class="led ${!d.online ? 'off-line' : d.relay ? 'on' : 'off'}" d="M28 48h8" stroke-width="3"/></svg>`;
 function deviceHTML(d) {
   return HD(esc(d.name), 'home', `<button type="button" class="ic" data-go="dev/${d.mac}/settings" aria-label="Einstellungen">${I.gear}</button>`, esc(d.cfg.room))
     + `<div class="grid">
-      <button type="button" class="tile devtgl ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-devtoggle="${d.mac}" role="switch" aria-checked="${d.relay}" aria-label="${esc(d.name)}">
-        <span class="ico">${I.toggle(d.relay)}</span><span class="lb">${d.relay ? `${pw(d.w)} · An` : 'Aus'}</span><span class="sub">${esc(subOf(d)) || '&nbsp;'}</span></button>
+      <button type="button" class="tile devtgl ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-devtoggle="${d.mac}" role="switch" aria-checked="${d.relay}" aria-label="${esc(d.name)} ${d.relay ? 'ausschalten' : 'einschalten'}">
+        <span class="ico">${sockIcon(d)}</span><span class="lb">${!d.online ? 'Offline' : d.relay ? pw(d.w) : 'Aus'}</span></button>
       ${FEAT.map(([k, ic, l]) => { const [on, txt] = featInfo(d, k); return `<button type="button" class="tile feat ${on ? 'act' : ''}" data-go="dev/${d.mac}/${k}"><span class="ico">${I[ic]}</span><span class="lb">${l}</span><span class="sub">${on || k === 'eval' ? esc(txt) : 'aus'}</span></button>`; }).join('')}
     </div>`;
 }
@@ -640,8 +642,7 @@ function energyHTML() {
   const m = view.mac, month = (view.day || S.today).slice(0, 7);
   return HD('Verbrauch', 'home') + chartHTML(m, true) + totalsHTML(m)
     + (m === 'all' && S.devices.length > 1 ? `<p class="sec">Heute je Gerät</p><div class="ls">${S.devices.map((d) => row(esc(d.name), chev(`${kwh(d.todayWh)} kWh`), '', `data-go="dev/${d.mac}/eval"`)).join('')}</div>` : '')
-    + `<button type="button" class="btn grey" data-go="export">Exportieren (CSV)</button>`
-    + '<p class="note" style="margin-top:4px">Alle 30 Sekunden gemessen und unbegrenzt bei dir gespeichert.</p>';
+    + `<button type="button" class="btn grey" data-go="export">Exportieren (CSV)</button>`;
 }
 // Export: Gerät, Zeitraum und Auflösung wählen, dann als CSV herunterladen (öffnet sich in Excel oder Numbers)
 const exp = { mac: null, from: null, to: null, res: 'hour' };
@@ -695,8 +696,7 @@ function guardHTML() {
 function rulesHTML() {
   const items = S.devices.flatMap((d) => FEAT.filter(([k]) => k !== 'eval' && k !== 'alarms').map(([k, ic, l]) => [d, k, l, ...featInfo(d, k)]).filter((x) => x[3]));
   return HD('Regeln', 'home') + (items.length ? `<div class="ls">${items.map(([d, k, l, , txt]) => row(`${esc(d.name)} · ${l}`, chev(), esc(txt), `data-go="dev/${d.mac}/${k}"`)).join('')}</div>`
-    : '<p class="empty-state">Noch keine Regel aktiv.<br>Öffne eine Steckdose und schalte z. B. „Nachts aus“ ein.</p>')
-    + '<p class="note">Regeln laufen auf deinem Server, auch wenn das Handy aus ist. Uhrzeit-Regeln schalten einmal zur eingestellten Zeit; dazwischen kannst du jederzeit von Hand schalten.</p>';
+    : '<p class="empty-state">Noch keine Regel aktiv.<br>Öffne eine Steckdose und schalte z. B. „Nachts aus“ ein.</p>');
 }
 let events = null;
 function alarmsHTML() {

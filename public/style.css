@@ -196,3 +196,9 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 /* Schalter-Kachel: feste Zeilen, damit der Schalter bei An/Aus nicht nach oben oder unten springt */
 .tile.devtgl { grid-template-rows: auto auto 2.6em; }
 .tile.devtgl .sub { align-self: start; }
+
+/* Schalter-Kachel der Geräteseite: Linien-Steckdose mit LED, darunter Leistung bzw. „Aus“; Inhalt als Block mittig, feste Zeilen */
+.tile.devtgl { display: grid; grid-template-rows: 56px 28px; align-content: center; justify-items: center; row-gap: 10px; padding: 16px 10px; }
+.tile.devtgl .ico { line-height: 0; } .tile.devtgl .ico svg { width: 56px; height: 56px; max-height: none; }
+.tile.devtgl .lb { font-size: 22px; font-weight: 500; line-height: 28px; letter-spacing: -.01em; }
+.tile.devtgl .led { stroke: #ff5a4e; transition: stroke .25s; } .tile.devtgl .led.on { stroke: #fff; } .tile.devtgl .led.off-line { stroke: #666; }

@@ -109,3 +109,8 @@ main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: m
 .handle { border-radius: 12px; }
 button:focus-visible, a:focus-visible, input:focus-visible { outline-color: var(--acc); }
 @media (min-width: 700px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+
+/* Schalter-Kachel der Geräteseite (an): Rahmen und leichte grüne Tönung statt voller Fläche, Steckdose und LED grün */
+.tile.devtgl.on { background: linear-gradient(160deg, rgb(99 209 26 / .16), rgb(99 209 26 / .07)); color: var(--fg); box-shadow: inset 0 0 0 1.5px rgb(99 209 26 / .75); }
+.tile.devtgl.on .ico { color: var(--acc); } .tile.devtgl.on .lb { color: var(--fg); }
+.tile.devtgl .led.on { stroke: var(--acc); } .tile.devtgl .led.off-line { stroke: #5b626b; }

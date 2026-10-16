@@ -114,3 +114,10 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline-color: var(
 .tile.devtgl.on { background: linear-gradient(160deg, rgb(99 209 26 / .16), rgb(99 209 26 / .07)); color: var(--fg); box-shadow: inset 0 0 0 1.5px rgb(99 209 26 / .75); }
 .tile.devtgl.on .ico { color: var(--acc); } .tile.devtgl.on .lb { color: var(--fg); }
 .tile.devtgl .led.on { stroke: var(--acc); } .tile.devtgl .led.off-line { stroke: #5b626b; }
+/* Steckdosen auf der Startseite (an) wie die Schalter-Kachel der Geräteseite: Rahmen und leichte grüne Tönung statt voller Fläche */
+.tile.dev.on .face { background: linear-gradient(160deg, rgb(99 209 26 / .16), rgb(99 209 26 / .07)), linear-gradient(160deg, var(--tile2), var(--tile)); color: var(--fg);
+  box-shadow: inset 0 0 0 1.5px rgb(99 209 26 / .75); }
+.tile.dev.on .face .ico { color: var(--acc); }
+.tile.dev.on .face .sub { color: var(--mut); }
+.grid.home .tile.dev.on .lb { color: var(--fg); }
+.tile.dev.on .tmp { background: rgb(99 209 26 / .14); color: #b9ec97; }

@@ -251,3 +251,4 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .stp .stpv { min-width: 72px; height: 34px; padding: 0 6px; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--fg); background: transparent; border: 0; font: inherit; }
 .stp .stpin { width: 72px; height: 34px; text-align: center; font: inherit; font-size: 16px; color: var(--fg); background: #3a3a3a; border: 0; border-radius: 6px; }
 .stp button[data-step] { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); z-index: 20; background: var(--bg); pointer-events: none; }

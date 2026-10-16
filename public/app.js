@@ -767,6 +767,7 @@ const design = () => (store.get('design') === 'mystrom' ? 'mystrom' : 'modern');
 function setDesign(v) {
   store.set('design', v);
   const l = document.getElementById('theme-modern'); if (l) l.disabled = v === 'mystrom';
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', v === 'mystrom' ? '#000000' : '#131920'); // Statusleiste wie die Kopfzeile
   app.dataset.page = ''; render();
 }
 function moreHTML() {

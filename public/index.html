@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#131920">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Steckdosen">
   <title>Steckdosen</title>
   <link rel="manifest" href="manifest.webmanifest">
@@ -16,7 +16,8 @@
   <link rel="stylesheet" href="modern.css" id="theme-modern">
   <script>
     // Design vor dem ersten Bild wählen (kein Aufblitzen): Standard ist "Modern", "myStrom" schaltet es ab
-    try { if (localStorage.getItem('design') === 'mystrom') document.getElementById('theme-modern').disabled = true; } catch { /* Standard */ }
+    // Statusleiste (theme-color) in der Farbe der Kopfzeile
+    try { if (localStorage.getItem('design') === 'mystrom') { document.getElementById('theme-modern').disabled = true; document.querySelector('meta[name=theme-color]').content = '#000000'; } } catch { /* Standard */ }
   </script>
 </head>
 <body>

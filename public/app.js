@@ -122,7 +122,7 @@ function daysText(days) {
 function featInfo(d, k) {
   const c = d.cfg;
   switch (k) {
-    case 'schedule': return [c.schedule.on, `${c.schedule.start}–${c.schedule.end} · ${daysText(c.schedule.days)}`];
+    case 'schedule': return [c.schedule.on, c.schedule.perDay ? `je Tag eigene Zeiten · ${daysText(c.schedule.days)}` : `${c.schedule.start}–${c.schedule.end} · ${daysText(c.schedule.days)}`];
     case 'idle': return [c.idle.on, `ab ${c.idle.from}, unter ${c.idle.below} W`];
     case 'vacation': return [c.vacation.on, `${dShort(c.vacation.from)}–${dShort(c.vacation.to)}`];
     case 'sun': return [c.sun.on || c.sun.off, [c.sun.on && 'abends an', c.sun.off && 'morgens aus'].filter(Boolean).join(', ')];
@@ -398,9 +398,18 @@ function featureHTML(d, k, sub) {
   const head = HD(FTITLE[k], back, '<span></span>', esc(d.name));
   const dim = (on) => (on ? 'ls' : 'ls dim');
   switch (k) {
-    case 'schedule': return head + `<p class="intro">Schaltet jeden gewählten Tag zur selben Zeit ein und aus. Dazwischen kannst du jederzeit von Hand schalten.</p>
-      <div class="${dim(c.schedule.on)}">${master(d, 'schedule')}${lrow('Ein um', inp('schedule.start', 'time', c.schedule.start))}${lrow('Aus um', inp('schedule.end', 'time', c.schedule.end))}</div>
-      <p class="sec">Tage</p><div class="chips days">${WD.map(([n, l]) => `<button type="button" class="chip" data-day="${n}" aria-pressed="${c.schedule.days.includes(n)}">${l}</button>`).join('')}</div>`;
+    case 'schedule': {
+      const s = c.schedule, perDay = `<div class="row"><span class="tx"><b>Je Tag eigene Zeiten</b></span>${sw('schedule.perDay', s.perDay, 'Je Tag eigene Zeiten')}</div>`;
+      if (!s.perDay) return head + `<p class="intro">Schaltet jeden gewählten Tag zur selben Zeit ein und aus.</p>
+      <div class="${dim(s.on)}">${master(d, 'schedule')}${lrow('Ein um', inp('schedule.start', 'time', s.start))}${lrow('Aus um', inp('schedule.end', 'time', s.end))}${perDay}</div>
+      <p class="sec">Tage</p><div class="chips days">${WD.map(([n, l]) => `<button type="button" class="chip" data-day="${n}" aria-pressed="${s.days.includes(n)}">${l}</button>`).join('')}</div>`;
+      // je Tag: Tag antippen schaltet ihn ein oder aus, daneben Ein- und Ausschaltzeit
+      return head + `<p class="intro">Jeder Tag hat eigene Zeiten. Tag antippen nimmt ihn aus dem Zeitplan.</p>
+      <div class="${dim(s.on)}">${master(d, 'schedule')}${perDay}</div>
+      <p class="sec">Ein – Aus</p><div class="ls ${s.on ? '' : 'dim'} week">${WD.map(([n, l]) => { const on = s.days.includes(n), t = s.week[n]; return `<div class="row wday ${on ? '' : 'off'}">
+        <button type="button" class="chip" data-day="${n}" aria-pressed="${on}" aria-label="${l} ${on ? 'aktiv' : 'aus'}">${l}</button>
+        ${on ? `${inp(`schedule.week.${n}.start`, 'time', t.start, `aria-label="${l} ein um"`)}<i>–</i>${inp(`schedule.week.${n}.end`, 'time', t.end, `aria-label="${l} aus um"`)}` : '<span class="dim">kein Zeitplan</span>'}</div>`; }).join('')}</div>`;
+    }
     case 'idle': return head + `<p class="intro">Im Zeitfenster schaltet die Steckdose ab, sobald so wenig Strom fliesst, dass niemand mehr dran arbeitet. Arbeitest du noch (PC und Bildschirm ziehen mehr), wartet sie.</p>
       <div class="${dim(c.idle.on)}">${master(d, 'idle')}${lrow('Ab', inp('idle.from', 'time', c.idle.from))}${lrow('Bis', inp('idle.to', 'time', c.idle.to))}
         ${lrow('Aus unter', inp('idle.below', 'number', c.idle.below, 'min="1" max="3000" inputmode="numeric"'), 'Watt; jetzt ' + pw(d.w))}

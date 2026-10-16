@@ -105,7 +105,9 @@ const DEFAULT_CFG = () => {
   return {
     name: '', room: '', icon: '', tcorr: 0, lock: false,
     actions: [], // Power Actions: wenn über/unter X W, dann …
-    schedule: { on: false, start: '07:00', end: '23:00', days: [1, 2, 3, 4, 5, 6, 0] },
+    // perDay: je Wochentag eigene Zeiten aus week (0 = So … 6 = Sa), sonst start/end für alle gewählten Tage
+    schedule: { on: false, start: '07:00', end: '23:00', days: [1, 2, 3, 4, 5, 6, 0], perDay: false,
+      week: Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((n) => [n, { start: '07:00', end: '23:00' }])) },
     idle: { on: false, from: '23:00', to: '07:00', below: 25, mins: 10, backOn: true }, // nachts aus, wenn nicht mehr benutzt
     temp: { on: false, max: 45 },
     sun: { on: false, off: false, onOffset: 0, offOffset: 0 },
@@ -300,8 +302,9 @@ async function runRules(d, prev, now) {
   const sw = async (on, why) => { if (r.relay !== on) await setRelay(d.mac, on, why); };
   // Zeitplan
   if (c.schedule.on && c.schedule.days.includes(weekday(now))) {
-    if (crossed(hm2min(c.schedule.start))) await sw(true, 'Zeitplan');
-    if (crossed(hm2min(c.schedule.end))) await sw(false, 'Zeitplan');
+    const t = c.schedule.perDay ? c.schedule.week[weekday(now)] : c.schedule;
+    if (crossed(hm2min(t.start))) await sw(true, 'Zeitplan');
+    if (crossed(hm2min(t.end))) await sw(false, 'Zeitplan');
   }
   // Nachts aus, wenn nicht mehr benutzt: im Zeitfenster abschalten, sobald die Leistung lange genug unter der Schwelle bleibt
   if (c.idle.on) {
@@ -601,7 +604,9 @@ const server = http.createServer(async (req, res) => {
       return json(deviceJson(dev));
     }
     if (dm && req.method === 'PUT') {
-      const b = await readBody(req);
+      const b = await readBody(req), sch = b.cfg?.schedule;
+      // „Je Tag eigene Zeiten“ eingeschaltet: alle Tage starten mit den bisherigen Zeiten
+      if (sch?.perDay && !dev.cfg.schedule.perDay && !sch.week) sch.week = Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((n) => [n, { start: dev.cfg.schedule.start, end: dev.cfg.schedule.end }]));
       dev.cfg = clean(DEFAULT_CFG(), merge(dev.cfg, b.cfg || {}));
       saveDevice(dev);
       return json(deviceJson(dev));

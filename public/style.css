@@ -211,3 +211,12 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .grid.home.editing .hit { pointer-events: none; }
 .hd .ic.done { width: auto; padding: 0 16px; border-radius: 999px; font-size: 15px; font-weight: 600; color: var(--acc); }
 @media (prefers-reduced-motion: reduce) { .grid.home.editing > [data-okey] { animation: none; outline: 1px dashed rgb(255 255 255 / .25); outline-offset: -4px; } }
+
+/* Zeitplan je Tag: Tag als runder Knopf, daneben Ein- und Ausschaltzeit */
+.ls.week .row.wday { gap: 10px; }
+.ls.week .row.wday .chip { width: 44px; min-width: 44px; height: 38px; padding: 0; flex: none; }
+.ls.week .row.wday i { font-style: normal; color: var(--mut, #888); }
+.ls.week .row.wday input[type="time"] { flex: 1; min-width: 0; }
+.ls.week .row.wday .dim { flex: 1; text-align: right; color: var(--mut, #888); font-size: 15px; }
+.ls.week .row.wday input[type="time"] { padding-left: 8px; padding-right: 8px; text-align: center; }
+.ls.week .row.wday input[type="time"]::-webkit-calendar-picker-indicator { display: none; }

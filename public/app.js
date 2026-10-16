@@ -326,20 +326,21 @@ function homeHTML() {
   // Aufbau wie die Startseite der myStrom-App: zuerst Szenen, Regeln, Home Guard, Verbrauch, Alarme, dann die Steckdosen.
   // Steckdosen-Kacheln ohne Pfeil und ohne Statuszeile; Watt mit einer Nachkommastelle wie im Original.
   const hint = '';
-  const tile = (h, icon, label) => `<button type="button" class="tile" data-go="${h}"><span class="ico">${icon}</span><span class="lb">${label}</span></button>`;
+  const tile = (h, icon, label) => `<button type="button" class="tile" data-go="${h}" data-okey="${h}"><span class="ico">${icon}</span><span class="lb">${label}</span></button>`;
   const T = {};
   const total = S.devices.reduce((a, d) => a + d.w, 0);
   const w1 = (w) => (w < 1000 ? `${w.toFixed(1)} W` : `${(w / 1000).toFixed(2)} kW`);
-  return `<header class="hd"><span></span><b>myStrom</b><button type="button" class="ic" data-go="more" aria-label="Mehr">${I.menu}</button></header>
-    <div class="grid home">
+  return `${editHome ? '<header class="hd"><span></span><b>Anordnen</b><button type="button" class="ic done" data-editdone="1">Fertig</button></header>'
+      : `<header class="hd"><span></span><b>myStrom</b><button type="button" class="ic" data-go="more" aria-label="Mehr">${I.menu}</button></header>`}
+    <div class="grid home ${editHome ? 'editing' : ''}">
       ${(T.scenes = tile('scenes', I.scenes, 'Szenen'), T.rules = tile('rules', I.rules, 'Regeln'), T.guard = tile('guard', I.guard, 'Home Guard'),
         T.energy = tile('energy', I.bolt, `<span class="dim">${pw(total)}</span><br>Verbrauch`), T.alarms = tile('alarms', I.bell, 'Alarme'), '')}
-      ${S.devices.map((d) => (T[d.mac] = `<div class="tile dev ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-mac="${d.mac}">
+      ${S.devices.map((d) => (T[d.mac] = `<div class="tile dev ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-mac="${d.mac}" data-okey="${d.mac}">
         <div class="face">${d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : ''}${d.cfg.lock ? '<span class="lock" title="Tastensperre">🔒</span>' : ''}
         <span class="ico">${devIcon(d)}</span><span class="lb">${d.relay ? `${w1(d.w)}<br>` : ''}${esc(d.name)}</span>
         ${d.online ? '' : '<span class="sub">Offline</span>'}</div>
         <button type="button" class="hit" data-swipe="${d.mac}" aria-label="${esc(d.name)}, ${d.relay ? 'an' : 'aus'}. Öffnen; Wischen oder Leertaste schaltet"></button></div>`, '')).join('')}
-      ${homeOrder().map((k) => T[k]).join('')}
+      ${(editHome ? editOrder : homeOrder()).map((k) => T[k]).join('')}
       ${S.devices.length ? '' : tile('more', I.plug, 'Steckdose hinzufügen')}
     </div>${hint}`;
 }
@@ -731,7 +732,6 @@ function moreHTML() {
       ${'geolocation' in navigator ? row('Standort vom Handy übernehmen', chev(), 'einmalig, nach deiner Freigabe', 'data-geo="1"') : ''}</div>
     <p class="note">Nur für Sonnenauf- und -untergang. Ein eingetippter Ort wird einmal bei Open-Meteo nachgeschlagen; vom Handy kommen die Koordinaten direkt.</p>
     <p class="sec">Design</p><div class="chips">${[['modern', 'Modern'], ['mystrom', 'myStrom']].map(([v, l]) => `<button type="button" class="chip" data-design="${v}" aria-pressed="${design() === v}">${l}</button>`).join('')}</div>
-    <p class="sec">Startseite</p><div class="ls">${row('Kacheln anordnen', chev(), 'Reihenfolge der Kacheln auf der Startseite', 'data-go="order"')}</div>
     <p class="sec">Steckdosen</p><div class="ls">${S.devices.map((d) => row(esc(d.name), chev(esc(d.ip)), `${esc(d.typeName)} · ${d.online ? 'erreichbar' : 'offline'}`, `data-go="dev/${d.mac}/settings"`)).join('')}
       ${lrow('Per IP hinzufügen', '<input type="text" id="addip" placeholder="192.168.0.42" inputmode="decimal" style="background:#2a2a2a;color:#e8e8e8;padding:7px 9px;text-align:left;max-width:160px">')}</div>
     <p class="note">Neue Steckdosen im WLAN findet die App von selbst. Eine IP brauchst du nur, wenn sie sich nicht meldet.</p>
@@ -758,7 +758,7 @@ function morph(a, b) {
   for (let i = bc.length; i < ac.length; i++) if (!ac[i].dataset?.transient) ac[i].remove();
 }
 function render(fresh = false) {
-  if (!S || swipe || drag) return;
+  if (!S || swipe || drag || hdrag) return;
   const [r0, r1, r2, r3] = route(), d = r0 === 'dev' ? dev(r1) : null;
   let html;
   if (r0 === 'dev') html = !d ? `${HD('Steckdose', 'home')}<p class="empty-state">Diese Steckdose gibt es nicht mehr.</p>` : r2 ? featureHTML(d, r2, r3) : deviceHTML(d);
@@ -806,7 +806,7 @@ async function flip(tile, d, sign) {
   if (!ok) shake(tile);
 }
 app.addEventListener('pointerdown', (e) => {
-  const b = e.target.closest('[data-swipe]'); if (!b || swipe) return;
+  const b = e.target.closest('[data-swipe]'); if (!b || swipe || editHome) return;
   swipe = { b, tile: b.closest('.tile'), x: e.clientX, y: e.clientY, dx: 0, id: e.pointerId, live: false };
 });
 // Sicherheitsnetz: bleibt ein Wischen hängen (z. B. Finger verlässt das Fenster), nach 3 s freigeben
@@ -877,7 +877,66 @@ function openDevPick() {
   setTimeout(() => el.classList.add('open'), 60); // falls gerade kein Bild gezeichnet wird
 }
 // ---------- Klicks ----------
+// ---------- Startseite anordnen: lange drücken, dann Kacheln ziehen (wie auf dem iPhone) ----------
+let editHome = false, editOrder = null, hdrag = null, lp = null, lpFired = 0;
+function enterEdit() {
+  swipe = null; haptic(15);
+  editHome = true; editOrder = homeOrder(); app.dataset.page = ''; render(true);
+}
+function exitEdit() {
+  const o = editOrder; editHome = false; editOrder = null; hdrag = null; app.dataset.page = '';
+  haptic(); saveOrder(o);
+}
+app.addEventListener('pointerdown', (e) => {
+  if (cur() !== 'home') return;
+  const t = e.target.closest('.grid.home > [data-okey]'); if (!t) return;
+  if (editHome) { startHomeDrag(t, e); return; }
+  clearTimeout(lp?.t);
+  lp = { x: e.clientX, y: e.clientY, t: setTimeout(() => { lp = null; lpFired = Date.now(); enterEdit(); }, 520) };
+}, true);
+app.addEventListener('pointermove', (e) => {
+  if (lp && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) > 8) { clearTimeout(lp.t); lp = null; } // bewegt = wischen oder scrollen
+  moveHomeDrag(e);
+}, true);
+const lpEnd = () => { if (lp) { clearTimeout(lp.t); lp = null; } endHomeDrag(); };
+app.addEventListener('pointerup', lpEnd, true);
+app.addEventListener('pointercancel', lpEnd, true);
+app.addEventListener('contextmenu', (e) => { if (e.target.closest('.grid.home')) e.preventDefault(); });
+// die gezogene Kachel folgt dem Finger; liegt sie über einer anderen, tauschen sie den Platz und die übrigen gleiten nach
+const followFinger = (t, e) => { t.style.transform = 'none'; const b = t.getBoundingClientRect(); t.style.transform = `translate(${e.clientX - hdrag.ox - b.left}px, ${e.clientY - hdrag.oy - b.top}px) scale(1.05)`; };
+function startHomeDrag(t, e) {
+  const r = t.getBoundingClientRect();
+  hdrag = { t, id: e.pointerId, ox: e.clientX - r.left, oy: e.clientY - r.top };
+  try { t.setPointerCapture(e.pointerId); } catch { /* ohne Zeiger-Erfassung weiter */ }
+  t.classList.add('lift'); haptic(8); e.preventDefault();
+}
+function moveHomeDrag(e) {
+  if (!hdrag || e.pointerId !== hdrag.id) return;
+  const t = hdrag.t;
+  followFinger(t, e);
+  t.style.pointerEvents = 'none';
+  const under = document.elementFromPoint(e.clientX, e.clientY)?.closest('.grid.home > [data-okey]');
+  t.style.pointerEvents = '';
+  if (!under || under === t) return;
+  const kids = [...t.parentElement.querySelectorAll(':scope > [data-okey]')], before = new Map(kids.map((k) => [k, k.getBoundingClientRect()]));
+  if (kids.indexOf(under) > kids.indexOf(t)) under.after(t); else under.before(t);
+  haptic(5);
+  for (const k of kids) {
+    if (k === t) continue;
+    const a = before.get(k), b = k.getBoundingClientRect(), dx = a.left - b.left, dy = a.top - b.top;
+    if (dx || dy) k.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  }
+  followFinger(t, e);
+}
+function endHomeDrag() {
+  if (!hdrag) return;
+  const t = hdrag.t; hdrag = null;
+  t.classList.remove('lift'); t.style.transform = '';
+  editOrder = [...t.parentElement.querySelectorAll(':scope > [data-okey]')].map((k) => k.dataset.okey);
+}
 app.addEventListener('click', async (e) => {
+  if (Date.now() - lpFired < 700) return; // das Loslassen nach dem langen Drücken öffnet nichts
+  if (editHome) { if (e.target.closest('[data-editdone]')) exitEdit(); return; } // im Bearbeiten-Modus wird nichts geschaltet oder geöffnet
   const at = (s) => e.target.closest(s), [r0, r1] = route();
   let el;
   if ((el = at('[data-swipe]'))) {

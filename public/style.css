@@ -202,3 +202,12 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .tile.devtgl .ico { line-height: 0; } .tile.devtgl .ico svg { width: 56px; height: 56px; max-height: none; }
 .tile.devtgl .lb { font-size: 22px; font-weight: 500; line-height: 28px; letter-spacing: -.01em; }
 .tile.devtgl .led { stroke: #ff5a4e; transition: stroke .25s; } .tile.devtgl .led.on { stroke: #fff; } .tile.devtgl .led.off-line { stroke: #666; }
+
+/* Startseite anordnen: Kacheln wackeln leicht, die gezogene hebt sich ab */
+@keyframes jiggle { 0%, 100% { transform: rotate(-.8deg); } 50% { transform: rotate(.8deg); } }
+.grid.home.editing > [data-okey] { animation: jiggle .3s ease-in-out infinite; touch-action: none; cursor: grab; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.grid.home.editing > [data-okey]:nth-child(2n) { animation-duration: .34s; animation-delay: -.15s; }
+.grid.home.editing > [data-okey].lift { animation: none; position: relative; z-index: 5; box-shadow: 0 18px 40px rgb(0 0 0 / .55); transition: none; cursor: grabbing; }
+.grid.home.editing .hit { pointer-events: none; }
+.hd .ic.done { width: auto; padding: 0 16px; border-radius: 999px; font-size: 15px; font-weight: 600; color: var(--acc); }
+@media (prefers-reduced-motion: reduce) { .grid.home.editing > [data-okey] { animation: none; outline: 1px dashed rgb(255 255 255 / .25); outline-offset: -4px; } }

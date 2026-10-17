@@ -67,19 +67,28 @@ Open the app on your phone and choose "Add to Home Screen". On the iPhone, push 
 
 ### Deploy hook (optional)
 
-`tools/deploy-hook.py` lets you update the server with one HTTP call: `POST /deploy` fetches `origin/main`, resets the checkout to it (also after a rewritten history), rebuilds the container and waits until the app answers again, streaming the output. It runs on the host as a systemd service, listens on `127.0.0.1` only and needs a secret token. Set it up once on the server:
+`tools/deploy-hook.py` updates projects on the server with one HTTP call: `POST /deploy/<service>` fetches the branch, resets the checkout to it (also after a rewritten history), rebuilds the containers and waits until the app answers again, streaming the output. It runs on the host as a systemd service, listens on `127.0.0.1` only and needs a secret token. It can serve several docker-compose projects. Set it up once on the server:
 
 ```bash
 sh tools/install-deploy-hook.sh
 ```
 
-The script creates the token, installs the service and, if Tailscale is installed, makes the hook reachable in your tailnet (`tailscale serve`, port 8444). It prints the URL and the token. Then, after every push:
+The script creates the token and `~/.config/mystrom-deploy/services.json` (starting with this project), installs the service and, if Tailscale is installed, makes the hook reachable in your tailnet (`tailscale serve`, port 8444). It prints the URL and the token. More projects are added to `services.json`, without a restart:
 
-```bash
-curl -N -X POST -H "Authorization: Bearer <token>" https://<your-server>.ts.net:8444/deploy
+```json
+{
+  "mystrom-app":     { "path": "~/mystrom-app", "health": "http://127.0.0.1:8091/api/state" },
+  "solar-dashboard": { "path": "~/solar-dashboard", "branch": "main", "compose": ["web"] }
+}
 ```
 
-`GET /deploy` with the same token shows the last run. Only tracked files are reset; `data/` and `.env` stay untouched.
+`path` is the checkout (required), `branch` defaults to `main`, `compose` limits the rebuild to these compose services, `health` is a URL that must answer after the restart. Then, after every push:
+
+```bash
+curl -N -X POST -H "Authorization: Bearer <token>" https://<your-server>.ts.net:8444/deploy/mystrom-app
+```
+
+`GET /deploy` lists the projects and their last run, `GET /deploy/<service>` shows the full log. Only tracked files are reset; `data/` and `.env` stay untouched. Changes to the hook itself take effect after `sudo systemctl restart mystrom-deploy`.
 
 ### Configuration
 

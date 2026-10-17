@@ -1,1 +1,10 @@
-{ "type": "module", "private": true, "name": "mystrom-app" }
+{
+  "name": "mystrom-app",
+  "version": "1.0.0",
+  "description": "Self-hosted app for myStrom WiFi Switches, Bulbs, Buttons and Motion Sensors: local control, metering and rules without the cloud",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "engines": { "node": ">=22.5" },
+  "scripts": { "start": "node server.js", "demo": "DEMO=1 PORT=8095 DB_PATH=/tmp/demo.db node server.js" }
+}

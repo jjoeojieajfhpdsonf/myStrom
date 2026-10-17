@@ -17,7 +17,7 @@
   <script>
     // Design vor dem ersten Bild wählen (kein Aufblitzen): Standard ist "Modern", "myStrom" schaltet es ab
     // Statusleiste (theme-color) in der Farbe der Kopfzeile
-    try { if (localStorage.getItem('design') === 'mystrom') { document.getElementById('theme-modern').disabled = true; document.querySelector('meta[name=theme-color]').content = '#000000'; } } catch { /* Standard */ }
+    try { if (localStorage.getItem('design') === 'mystrom') { document.getElementById('theme-modern').disabled = true; document.querySelector('meta[name=theme-color]').content = '#000000'; } } catch { /* default */ }
   </script>
 </head>
 <body>

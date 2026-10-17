@@ -3,13 +3,13 @@ services:
     build: .
     container_name: mystrom-app
     restart: unless-stopped
-    # Host-Netz: nur so kommen die UDP-Meldungen der Steckdosen (Port 7979) im Container an
+    # Host network: the only way the sockets' UDP announcements (port 7979) reach the container
     network_mode: host
     environment:
       PORT: ${MYSTROM_PORT:-8091}
       TZ: Europe/Zurich
       POLL_SECONDS: 30
-      # DEVICES: 192.168.1.50,192.168.1.51            # nur nötig, wenn sich eine Steckdose nicht von selbst meldet
-      # DEMO: "1"                                       # drei simulierte Steckdosen zum Ausprobieren
+      # DEVICES: 192.168.1.50,192.168.1.51              # only needed if a socket does not announce itself
+      # DEMO: "1"                                       # three simulated sockets to try things out
     volumes:
       - ./data:/data

@@ -1,12 +1,12 @@
-/* Steckdosen, modern: gleicher Aufbau, gleiche Knöpfe an derselben Stelle; Kacheln als abgerundete Flächen mit Abstand,
-   Glas-Kopfzeile, gruppierte Listen, grünes Leuchten für "an". Bewusst nur dunkel, wie die App. */
+/* Sockets, modern: same layout, same buttons in the same place; tiles as rounded, spaced surfaces,
+   glass header, grouped lists, green glow for "on". Deliberately dark only, like the app. */
 :root {
   --bg: #0b0d10; --bg2: #101318; --tile: #171b21; --tile2: #1c2128; --list: #161a20; --line: rgb(255 255 255 / .06);
   --fg: #eef1f4; --mut: #8b939e; --acc: #63d11a; --acc2: #3f9e05; --red: #ff5a4e;
-  /* eingeschaltete Kacheln: dezente Tönung, gedämpfter Rahmen, Symbol und Temperatur */
+  /* tiles that are on: subtle tint, muted border, icon and temperature */
   --on-a: rgb(99 209 26 / .075); --on-b: rgb(99 209 26 / .025); --on-line: rgb(99 209 26 / .32); --on-ico: #8cc865;
   --on-chip: rgb(99 209 26 / .09); --on-chiptxt: #a6d488;
-  /* --top: Farbe am oberen Rand; Kopfzeile, Statusleiste (theme-color) und Seitenanfang haben genau diese Farbe */
+  /* --top: color at the top edge; header, status bar (theme-color) and page top use exactly this color */
   --top: #131920; --page: linear-gradient(180deg, var(--top) 0, var(--bg) 460px);
   --r: 22px; --r-s: 14px; --gap: 10px;
   --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
@@ -17,16 +17,16 @@ body { background: var(--page) fixed, var(--bg); color: var(--fg); font-family: 
 main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--page) var(--bg); }
 .page-copy { background: var(--page) var(--bg); }
 
-/* Kopfzeile aus Glas, gleiche Position der Knöpfe */
+/* Glass header, buttons in the same position */
 .hd { top: env(safe-area-inset-top, 0px); margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))) 12px; padding: 6px max(10px, env(safe-area-inset-left, 0px)); min-height: 56px;
   background: transparent; border-bottom: 1px solid transparent; transition: background-color .2s, border-color .2s; }
-/* erst beim Scrollen abgesetzt, oben fliesst der Hintergrund durch */
+/* only set apart when scrolling; at the top the background flows through */
 html.scrolled .hd, .page-copy.scrolled .hd { background: rgb(19 25 32 / .94); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); border-bottom-color: var(--line); }
 .hd b { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
 .hd .ic { width: 44px; height: 44px; border-radius: 50%; background: rgb(255 255 255 / .06); font-size: 22px; }
 .hd .ic svg { width: 20px; height: 20px; }
 
-/* Kacheln: abgerundet, mit Abstand, leichter Verlauf */
+/* Tiles: rounded, spaced, slight gradient */
 .grid { gap: var(--gap); }
 .tile { border-radius: var(--r); background: linear-gradient(160deg, var(--tile2), var(--tile)); box-shadow: inset 0 1px 0 rgb(255 255 255 / .05), 0 1px 2px rgb(0 0 0 / .4); color: var(--fg); }
 .tile .lb { font-weight: 500; }
@@ -51,13 +51,13 @@ html.scrolled .hd, .page-copy.scrolled .hd { background: rgb(19 25 32 / .94); -w
 .grid.home .tile .lb { color: var(--fg); font-size: 15.5px; }
 .hint { padding-top: 14px; }
 
-/* Raum, Symbol, Gerät wählen */
+/* Choose room, icon, device */
 .tile.room.sel { box-shadow: inset 0 0 0 1.5px rgb(238 241 244 / .7); }
 .tile.room .chk { left: 12px; top: 12px; width: 24px; height: 24px; color: var(--bg); background: var(--fg); }
 .tile.room .new { width: 56px; height: 24px; right: 10px; bottom: 10px; background: rgb(99 209 26 / .16); border-radius: 999px; }
 .tile.room .new i { position: static; transform: none; display: grid; place-items: center; height: 100%; color: #9fe36a; font-size: 11px; font-weight: 600; letter-spacing: .03em; }
 
-/* Listen als gruppierte Karten */
+/* Lists as grouped cards */
 .ls { background: var(--list); border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; margin: 0 0 18px; }
 .row { border-top: 1px solid var(--line); min-height: 54px; }
 .row .tx b { font-weight: 500; }
@@ -69,7 +69,7 @@ html.scrolled .hd, .page-copy.scrolled .hd { background: rgb(19 25 32 / .94); -w
 .note, .intro { padding-left: 4px; padding-right: 4px; }
 .intro { color: #c3cad2; }
 
-/* Schalter, Wahlknöpfe, Knöpfe */
+/* Switches, choice buttons, buttons */
 .sw { background: #2a3038; }
 .sw[aria-pressed="true"] { background: linear-gradient(150deg, #76e02a, var(--acc2)); }
 .chips { padding: 0; }
@@ -80,13 +80,13 @@ html.scrolled .hd, .page-copy.scrolled .hd { background: rgb(19 25 32 / .94); -w
 .btn.grey { background: rgb(255 255 255 / .08); color: var(--fg); font-weight: 600; }
 .btn.danger { background: rgb(255 90 78 / .1); color: var(--red); box-shadow: none; }
 
-/* Verbrauch */
+/* Consumption */
 .big { padding-top: 10px; }
 .big b { font-size: 56px; font-weight: 300; letter-spacing: -.02em; }
 .big b small { font-size: 18px; letter-spacing: 0; color: var(--mut); }
 .periods { margin: 14px 0 0; background: rgb(255 255 255 / .06); border-radius: 12px; padding: 3px; }
 .periods button { border-radius: 9px; color: var(--mut); }
-/* gewählt heller als die Leiste (vorher dunkler: wirkte vertauscht) */
+/* selected lighter than the bar (previously darker: looked inverted) */
 .periods button[aria-pressed="true"] { background: rgb(255 255 255 / .12); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .35), inset 0 1px 0 rgb(255 255 255 / .06); }
 .nav { padding: 14px 0 8px; }
 .nav .devsel { border: 0; background: rgb(255 255 255 / .07); border-radius: 999px; padding: 6px 14px; font-weight: 500; }
@@ -105,7 +105,7 @@ html.scrolled .hd, .page-copy.scrolled .hd { background: rgb(19 25 32 / .94); -w
 .foot small { color: var(--mut); }
 .foot + .ls, .chart + .foot + .ls { margin-top: 18px; }
 
-/* Geräteseite, Einstellungen, Overlay, Meldung */
+/* Device page, settings, overlay, toast */
 .hero { padding: 10px 0 22px; }
 .hero svg { width: 64px; height: 64px; color: #cfd5dc; }
 #toast { border-radius: 999px; background: rgb(28 33 40 / .92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--line); font-weight: 500; }
@@ -117,19 +117,19 @@ html.scrolled .hd, .page-copy.scrolled .hd { background: rgb(19 25 32 / .94); -w
 button:focus-visible, a:focus-visible, input:focus-visible { outline-color: var(--acc); }
 @media (min-width: 700px) { .grid { grid-template-columns: repeat(3, 1fr); } }
 
-/* Schalter-Kachel der Geräteseite (an): Rahmen und leichte grüne Tönung statt voller Fläche, Steckdose und LED grün */
+/* Device page switch tile (on): border and light green tint instead of a solid fill, socket and LED green */
 .tile.devtgl.on { background: linear-gradient(160deg, var(--on-a), var(--on-b)); color: var(--fg); box-shadow: inset 0 0 0 1.5px var(--on-line); }
 .tile.devtgl.on .ico { color: var(--on-ico); } .tile.devtgl.on .lb { color: var(--fg); }
 .tile.devtgl .led.on { stroke: var(--on-ico); } .tile.devtgl .led.off-line { stroke: #5b626b; }
-/* Steckdosen auf der Startseite (an) wie die Schalter-Kachel der Geräteseite: Rahmen und leichte grüne Tönung statt voller Fläche */
+/* Sockets on the home page (on) like the device page switch tile: border and light green tint instead of a solid fill */
 .tile.dev.on .face { background: linear-gradient(160deg, var(--on-a), var(--on-b)), linear-gradient(160deg, var(--tile2), var(--tile)); color: var(--fg);
   box-shadow: inset 0 0 0 1.5px var(--on-line); }
 .tile.dev.on .face .ico { color: var(--on-ico); }
 .tile.dev.on .face .sub { color: var(--mut); }
 .grid.home .tile.dev.on .lb { color: var(--fg); }
 .tile.dev.on .tmp { background: var(--on-chip); color: var(--on-chiptxt); }
-/* Gerät wählen (Verbrauch): an = Tönung und grüner Rahmen wie auf der Startseite; ausgewählt = heller Rahmen und Häkchen;
-   Schrift immer hell (vorher: ausgewählt und an zusammen ergab dunkle Schrift auf dunkler Fläche) */
+/* Choose device (consumption): on = tint and green border like on the home page; selected = light border and checkmark;
+   text always light (previously: selected and on together gave dark text on a dark surface) */
 .pick .tile.room.on { background: linear-gradient(160deg, var(--on-a), var(--on-b)), linear-gradient(160deg, var(--tile2), var(--tile)); color: var(--fg); box-shadow: inset 0 0 0 1.5px var(--on-line); }
 .pick .tile.room.on .ico { color: var(--on-ico); }
 .pick .tile.room .lb, .pick .tile.room.on .lb, .pick .tile.room.sel .lb { color: var(--fg); }
@@ -140,29 +140,29 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline-color: var(
 .pick .tile.room.sel:not(.on) { background: linear-gradient(160deg, var(--tile2), var(--tile)); }
 
 
-/* − / + statt Zahlenfeld */
+/* − / + instead of a number field */
 .stp { display: inline-flex; align-items: center; gap: 4px; flex: none; background: rgb(255 255 255 / .06); border-radius: 12px; padding: 3px; }
 .stp button { width: 36px; height: 34px; border-radius: 9px; font-size: 20px; line-height: 1; color: var(--fg); background: rgb(255 255 255 / .06); }
 .stp button:active:not(:disabled) { background: rgb(255 255 255 / .14); }
 .stp button:disabled { opacity: .3; }
 .stp output { min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; font-size: 15.5px; white-space: nowrap; }
-/* Menü von links */
+/* Menu from the left */
 .drawer-panel { background: var(--bg2); box-shadow: 1px 0 0 var(--line), 12px 0 40px rgb(0 0 0 / .5); border-radius: 0 24px 24px 0; }
 .ni:active, .ni:focus-visible { background: rgb(255 255 255 / .06); }
-/* Zeitplan: Kopf je Eintrag mit „Entfernen“ */
+/* Schedule: header per entry with "Remove" */
 .schd-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .schd-hd .tlink { color: var(--red, #ff5a4e); font-size: 14.5px; padding: 8px 4px; }
 .stp .stpv { min-width: 72px; height: 34px; padding: 0 6px; border-radius: 9px; text-align: center; font-variant-numeric: tabular-nums; font-size: 15.5px; white-space: nowrap; color: var(--fg); background: transparent; }
 .stp .stpv:active { background: rgb(255 255 255 / .08); }
 .stp .stpin { width: 72px; height: 34px; padding: 0 6px; text-align: center; font: inherit; font-size: 16px; color: var(--fg); background: rgb(255 255 255 / .1); border: 0; border-radius: 9px; box-shadow: inset 0 0 0 1.5px var(--on-line); }
 .stp button[data-step] { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
-/* gewählte Chips (Tage, Dauer, Design …) dezent wie die eingeschalteten Kacheln statt voller grüner Fläche */
+/* selected chips (days, duration, design …) subtle like tiles that are on, instead of a solid green fill */
 .chip[aria-pressed="true"] { background: var(--on-chip); color: var(--on-chiptxt); box-shadow: inset 0 0 0 1px var(--on-line); font-weight: 600; }
-/* beim Seitenwechsel springt die Kopfzeile ohne Überblenden in den richtigen Zustand */
+/* on page transition the header jumps to the right state without crossfading */
 html.paging .hd { transition: none; }
-/* Streifen unter der Statusleiste (iPhone, Vollbild) in Kopfzeilenfarbe, darunter scrollt nichts sichtbar durch */
+/* strip under the status bar (iPhone, fullscreen) in header color, nothing visibly scrolls through beneath it */
 body::before { background: var(--top); }
-/* Temperaturverlauf: warmer, gedämpfter Ton statt Grün; Schwelle rot gestrichelt */
+/* Temperature history: warm, muted tone instead of green; threshold dashed red */
 .chart.temp svg .tline { stroke: #e3a25c; }
 .chart.temp svg .tbar { fill: rgb(227 162 92 / .55); }
 .chart.temp svg .tbar.now { fill: #e3a25c; }
@@ -171,13 +171,13 @@ body::before { background: var(--top); }
 .foot.three b { font-size: 24px; }
 .nav .sp { flex: 1; }
 
-/* Lampe: Farbfelder und Helligkeit */
+/* Lamp: color swatches and brightness */
 .swatches { display: flex; flex-wrap: wrap; gap: 12px; padding: 4px 2px 14px; }
 .swatch { width: 40px; height: 40px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12); }
 .swatch.sel { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px rgb(238 241 244 / .75); }
 .row.bright { gap: 14px; }
 .row.bright input[type=range] { flex: 1; min-width: 120px; max-width: 220px; accent-color: #e3a25c; background: transparent; padding: 0; }
-/* Taster, Bewegungsmelder: Kopf mit Zustand */
+/* Button, motion sensor: header with state */
 .hero .dim { color: var(--mut); font-size: 14px; }
 .hero.live { color: var(--on-ico); }
 .tile.info .sub { color: var(--mut); }

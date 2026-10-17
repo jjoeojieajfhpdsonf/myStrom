@@ -1,10 +1,10 @@
-// Steckdosen – Oberfläche im Stil der myStrom-App, mit allen Funktionen (auch PLUS, PRO, DATA PRO, HOME GUARD) frei.
-// Bedienung: Kachel wischen schaltet, tippen öffnet das Gerät. Änderungen speichern sofort.
+// Smart plugs – UI in the style of the myStrom app, with all features unlocked (incl. PLUS, PRO, DATA PRO, HOME GUARD).
+// Usage: swiping a tile toggles it, tapping opens the device. Changes are saved immediately.
 'use strict';
 
 const $ = (s, el = document) => el.querySelector(s);
 const app = $('#app');
-let S = null; // Zustand vom Server
+let S = null; // State from the server
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const pw = (w) => (w < 1000 ? `${Math.round(w)} W` : `${(w / 1000).toFixed(2)} kW`);
 const pwN = (w) => (w < 1000 ? [String(Math.round(w)), 'W'] : [(w / 1000).toFixed(2), 'kW']);
@@ -15,12 +15,12 @@ const addDays = (day, n) => { const d = new Date(`${day}T12:00:00Z`); d.setUTCDa
 const MONTHS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 const dayLabel = (day) => (day === S.today ? 'Heute' : day === addDays(S.today, -1) ? 'Gestern' : `${Number(day.slice(8))}. ${MONTHS[Number(day.slice(5, 7)) - 1]}`);
 const dev = (mac) => S.devices.find((d) => d.mac === mac);
-// schaltbar und mit Verbrauch: Steckdosen und Lampen (nicht Taster, Bewegungsmelder)
+// switchable and with consumption: plugs and bulbs (not buttons, motion sensors)
 const canSwitch = (d) => d.kind === 'switch' || d.kind === 'bulb';
 const SW = () => S.devices.filter(canSwitch);
-const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* privat */ } } };
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private */ } } };
 
-// Linien-Symbole wie in der myStrom-App
+// Line icons like in the myStrom app
 const I = {
   plug: '<svg viewBox="0 0 48 64" width="40" height="54" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6h24a6 6 0 0 1 6 6v36a10 10 0 0 1-10 10H16A10 10 0 0 1 6 48V12a6 6 0 0 1 6-6z"/><ellipse cx="24" cy="18" rx="11" ry="7"/><circle cx="19.5" cy="18" r="1.4" fill="currentColor"/><circle cx="28.5" cy="18" r="1.4" fill="currentColor"/><circle cx="24" cy="21.5" r="1.4" fill="currentColor"/><circle cx="13" cy="50" r="1.4" fill="currentColor"/></svg>',
   scenes: '<svg viewBox="0 0 64 64" width="52" height="52" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="20" width="26" height="26" rx="4" transform="rotate(45 21 33)"/><rect x="16" y="20" width="26" height="26" rx="4" transform="rotate(45 29 33)"/><rect x="24" y="20" width="26" height="26" rx="4" transform="rotate(45 37 33)"/></svg>',
@@ -42,7 +42,7 @@ const I = {
   toggle: (on) => `<svg viewBox="0 0 64 40" width="64" height="40" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="58" height="30" rx="15"/><circle class="knob" cx="18" cy="20" r="10" fill="${on ? '#fff' : '#777'}" stroke="none" style="transform:translateX(${on ? 28 : 0}px)"/></svg>`,
 };
 
-// Funktionen pro Steckdose: Schlüssel = Block in den Einstellungen
+// Features per plug: key = section in the settings
 const FEAT = [
   ['schedule', 'clock', 'Zeitplan'], ['actions', 'pact', 'Power Actions'], ['vacation', 'beach', 'Ferien'],
   ['sun', 'sun', 'Sonne'], ['timer', 'timer', 'Timer'], ['saver', 'leaf', 'Stromsparen'],
@@ -73,11 +73,11 @@ const ROOM_ICON = {
   plus: RI('<circle cx="32" cy="32" r="20"/><path d="M32 22v20M22 32h20"/>'),
   none: RI('<path d="M14 14h36v36H14z" stroke-dasharray="4 4"/>'),
 };
-// Vorlagen wie in der myStrom-App, alphabetisch
+// Presets like in the myStrom app, alphabetical
 const ROOMS = [['Babyzimmer', 'baby'], ['Badezimmer', 'bath'], ['Balkon', 'balcony'], ['Büro', 'office'], ['Esszimmer', 'dining'], ['Estrich', 'attic'], ['Flur', 'hall'],
   ['Garage', 'garage'], ['Garten', 'garden'], ['Gästezimmer', 'guest'], ['Heimkino', 'cinema'], ['Keller', 'stairs'], ['Kinderzimmer', 'kids'], ['Küche', 'kitchen'],
   ['Schlafzimmer', 'bed'], ['Waschküche', 'laundry'], ['Werkstatt', 'workshop'], ['Wohnzimmer', 'sofa']];
-// Geräte-Symbole: was an der Steckdose hängt
+// Device icons: what is plugged into the plug
 const DI = (d) => `<svg viewBox="0 0 64 64" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">${d}</svg>`;
 const DEV_ICONS = [
   ['plug', 'Steckdose', null],
@@ -105,7 +105,7 @@ const DEV_ICONS = [
   ['plant', 'Pflanzenlicht', DI('<path d="M20 40h24l-4 16H24zM32 40V24M32 30c-8 0-12-6-12-12 8 0 12 6 12 12M32 26c6 0 10-4 10-10-6 0-10 4-10 10"/>')],
   ['tree', 'Weihnachtsbaum', DI('<path d="M32 4l12 16h-6l10 14h-8l10 14H14l10-14h-8l10-14h-6zM32 48v10"/>')],
 ];
-// eigenes Symbol, sonst am Namen erraten, sonst die Steckdose
+// custom icon, else guessed from the name, else the plug
 const GUESS = [[/lamp|licht|leuchte/, 'lamp'], [/mirror|spiegel/, 'mirror'], [/\btv\b|fernseh/, 'tv'], [/bildschirm|monitor/, 'monitor'], [/\bpc\b|computer|rechner/, 'pc'],
   [/schreibtisch|büro|arbeit/, 'desk'], [/kaffee|espresso/, 'coffee'], [/wasserkocher/, 'kettle'], [/ventilator/, 'fan'], [/heiz|radiator/, 'heater'],
   [/wasch/, 'washer'], [/kühl/, 'fridge'], [/router|wlan|wifi/, 'router'], [/ladestation|ladeger/, 'charger'], [/drucker/, 'printer'], [/pflanz/, 'plant'],
@@ -127,8 +127,8 @@ function daysText(days) {
   if (days.length === 2 && days.includes(0) && days.includes(6)) return 'Sa, So';
   return WD.filter(([n]) => days.includes(n)).map(([, l]) => l).join(', ') || 'nie';
 }
-// ist die Funktion eingeschaltet, und was tut sie (Kurzform für die Kachel)
-// welche Alarme es je Art gibt: Lampen messen keine Temperatur, Bewegungsmelder keinen Verbrauch
+// is the feature enabled, and what does it do (short form for the tile)
+// which alarms exist per type: bulbs don't measure temperature, motion sensors no consumption
 const alarmKeys = (d) => (d.kind === 'motion' ? ['offline', 'hot'] : d.kind === 'bulb' ? ['offline', 'unusual', 'switchedOn'] : ['offline', 'unusual', 'switchedOn', 'hot']);
 function featInfo(d, k) {
   const c = d.cfg;
@@ -156,7 +156,7 @@ async function api(p, opt = {}) {
 async function load() {
   try { const first = !S; S = await api('api/state'); render(first); } catch (e) { if (!S) app.innerHTML = `<p class="empty-state">Server nicht erreichbar.<br>${esc(e.message)}</p>`; }
 }
-// Einstellungen eines Geräts ändern: sofort anzeigen, dann speichern
+// Change a device's settings: show immediately, then save
 async function saveCfg(mac, patch) {
   const d = dev(mac);
   const deep = (a, b) => { for (const [k, v] of Object.entries(b)) { if (v && typeof v === 'object' && !Array.isArray(v)) deep(a[k], v); else a[k] = v; } };
@@ -165,19 +165,19 @@ async function saveCfg(mac, patch) {
 }
 const patchOf = (path, v) => path.split('.').reduceRight((acc, k) => ({ [k]: acc }), v);
 
-// ---------- Haptik ----------
-// Android: navigator.vibrate. iPhone (ab iOS 18) kennt das nicht, gibt aber beim Umschalten eines
-// <input type="checkbox" switch> ein leichtes Tippen; das lösen wir unsichtbar aus. Geht nur direkt nach Tippen/Loslassen.
+// ---------- Haptics ----------
+// Android: navigator.vibrate. iPhone (iOS 18+) lacks it, but toggling an
+// <input type="checkbox" switch> gives a light tap; we trigger that invisibly. Only works right after a tap/release.
 function haptic(ms = 10) {
   try {
     if (navigator.vibrate) { navigator.vibrate(ms); return; }
     const l = document.createElement('label'), i = document.createElement('input');
     l.ariaHidden = 'true'; l.style.display = 'none'; i.type = 'checkbox'; i.setAttribute('switch', '');
     l.append(i); document.head.append(l); l.click(); l.remove();
-  } catch { /* ohne Haptik weiter */ }
+  } catch { /* continue without haptics */ }
 }
 
-// ---------- Schalten ----------
+// ---------- Switching ----------
 let toastT;
 function toast(text, err = false) {
   const t = $('#toast');
@@ -199,13 +199,13 @@ async function switchDev(mac, on) {
 }
 const shake = (el) => el?.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(-3px)' }, { transform: 'none' }], 260);
 
-// ---------- Navigation über den Hash (#dev/MAC/timer), damit Zurück und Mitteilungen funktionieren ----------
+// ---------- Navigation via the hash (#dev/MAC/timer), so Back and notifications work ----------
 const cur = () => location.hash.slice(1) || 'home';
 const route = () => cur().split('/');
 const depth = (h) => (h === 'home' ? 0 : h.split('/').length);
-// Verlauf innerhalb der App: Zurück geht zur Seite davor, wenn das die übergeordnete ist, sonst direkt dorthin
+// In-app history: Back goes to the previous page if it is the parent, otherwise straight there
 const stack = [cur()], scrolls = {};
-let dir = 0; // 1 = vorwärts, -1 = zurück (für die Animation)
+let dir = 0; // 1 = forward, -1 = back (for the animation)
 function go(h) {
   if (h === cur()) return;
   scrolls[cur()] = scrollY;
@@ -216,34 +216,34 @@ function go(h) {
 function back(parent) {
   scrolls[cur()] = scrollY;
   const i = stack.lastIndexOf(parent);
-  if (i >= 0 && i < stack.length - 1) { history.go(i - (stack.length - 1)); return; } // popstate erledigt den Rest
+  if (i >= 0 && i < stack.length - 1) { history.go(i - (stack.length - 1)); return; } // popstate handles the rest
   stack.pop(); if (stack[stack.length - 1] !== parent) stack.push(parent);
   dir = -1;
   history.replaceState(null, '', `#${parent}`);
   show();
 }
-// Wischgeste "Zurück" des Browsers oder iOS
+// "Back" swipe gesture of the browser or iOS
 addEventListener('popstate', () => {
   const h = cur(), i = stack.lastIndexOf(h);
   dir = i >= 0 && i < stack.length - 1 ? -1 : depth(h) < depth(stack[stack.length - 1] || 'home') ? -1 : 1;
   if (i >= 0) stack.length = i + 1; else stack.push(h);
   show();
 });
-// Seitenwechsel wie unter iOS: die neue Seite schiebt sich von rechts über die alte, die alte weicht etwas nach
-// links aus und wird dunkler; zurück genau umgekehrt. Dafür bleibt eine Kopie der alten Seite kurz stehen.
+// Page transition like on iOS: the new page slides in from the right over the old one, the old one shifts slightly
+// left and darkens; back is the exact reverse. For this, a copy of the old page stays briefly.
 const EASE = 'cubic-bezier(.32,.72,0,1)', DUR = 380;
 let ghost = null;
 function show() {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, oldScroll = scrollY;
-  for (const a of app.getAnimations()) a.finish(); // ein laufender Wechsel wird sofort fertig
+  for (const a of app.getAnimations()) a.finish(); // a running transition finishes immediately
   ghost?.remove(); ghost = null;
   if (dir && !reduced && S) {
     ghost = document.createElement('div');
-    ghost.className = `page-copy${oldScroll > 4 ? ' scrolled' : ''}`; // Kopie behält die abgesetzte Kopfzeile, wenn gescrollt war
+    ghost.className = `page-copy${oldScroll > 4 ? ' scrolled' : ''}`; // copy keeps the raised header if it was scrolled
     const inner = app.cloneNode(true); inner.removeAttribute('id'); inner.removeAttribute('aria-live');
     ghost.append(inner);
     document.body.append(ghost);
-    ghost.scrollTop = oldScroll; // Kopie zeigt genau den Ausschnitt, der eben zu sehen war
+    ghost.scrollTop = oldScroll; // copy shows exactly the section that was just visible
   }
   render(true);
   scrollTo(0, dir < 0 ? scrolls[cur()] || 0 : 0);
@@ -251,20 +251,20 @@ function show() {
     const g = ghost, w = innerWidth, fwd = dir > 0;
     document.documentElement.classList.add('paging');
     g.style.zIndex = fwd ? '1' : '30';
-    const top = fwd ? app : g; // die Seite, die oben liegt und ganz hinein- bzw. hinausfährt
+    const top = fwd ? app : g; // the page on top that slides fully in or out
     top.style.boxShadow = '-12px 0 32px rgb(0 0 0 / .55)';
     const under = fwd ? g : app;
     const a1 = top.animate(fwd ? [{ transform: `translateX(${w}px)` }, { transform: 'none' }] : [{ transform: 'none' }, { transform: `translateX(${w}px)` }], { duration: DUR, easing: EASE });
     const a2 = under.animate(fwd ? [{ transform: 'none', filter: 'brightness(1)' }, { transform: `translateX(${-w * 0.3}px)`, filter: 'brightness(.55)' }]
       : [{ transform: `translateX(${-w * 0.3}px)`, filter: 'brightness(.55)' }, { transform: 'none', filter: 'brightness(1)' }], { duration: DUR, easing: EASE });
     a1.finished.catch(() => {}).then(() => { if (ghost === g) { g.remove(); ghost = null; } top.style.boxShadow = ''; document.documentElement.classList.remove('paging'); });
-    // Sicherheitsnetz: pausiert der Browser die Animation (App im Hintergrund, verdeckter Tab), steht die Seite trotzdem
-    // spätestens nach kurzer Zeit richtig; sonst bliebe sie verschoben und jedes Tippen ginge daneben
+    // Safety net: if the browser pauses the animation (app in background, hidden tab), the page still ends up
+    // correct after a short time at the latest; otherwise it would stay offset and every tap would miss
     setTimeout(() => { for (const a of [a1, a2]) if (a.playState !== 'finished') a.finish(); }, DUR + 150);
   }
   dir = 0;
 }
-// vom linken Rand nach rechts wischen = zurück (auf dem iPhone-Homescreen gibt es sonst keine Zurück-Geste)
+// swipe right from the left edge = back (on the iPhone home screen there is no other back gesture)
 let edge = null;
 addEventListener('pointerdown', (e) => { if (e.clientX < 24 && cur() !== 'home' && e.pointerType !== 'mouse') edge = { x: e.clientX, y: e.clientY, id: e.pointerId }; }, true);
 addEventListener('pointermove', (e) => {
@@ -275,16 +275,16 @@ addEventListener('pointermove', (e) => {
 addEventListener('pointerup', () => { edge = null; }, true);
 const HD = (title, backTo, right = '<span></span>', sub = '') => `<header class="hd"><button type="button" class="ic" data-back="${backTo}" aria-label="Zurück">‹</button><b>${title}${sub ? `<small>${sub}</small>` : ''}</b>${right}</header>`;
 
-// ---------- Bausteine ----------
+// ---------- Building blocks ----------
 const sw = (path, on, label) => `<button type="button" class="sw" data-sw="${path}" aria-pressed="${on}" aria-label="${esc(label)}"></button>`;
 const row = (label, right, sub = '', attrs = '') => `<${attrs ? `button type="button" ${attrs}` : 'div'} class="row"><span class="tx"><b>${label}</b>${sub ? `<span>${sub}</span>` : ''}</span>${right}</${attrs ? 'button' : 'div'}>`;
 const inp = (path, type, value, extra = '') => `<input type="${type}" data-in="${path}" value="${esc(value)}" ${extra}>`;
 const lrow = (label, input, sub = '') => `<label class="row"><span class="tx"><b>${label}</b>${sub ? `<span>${sub}</span>` : ''}</span>${input}</label>`;
 const master = (d, k, label = 'Aktiv') => `<div class="row master"><span class="tx"><b>${label}</b></span>${sw(`${k}.on`, d.cfg[k].on, label)}</div>`;
 
-// Zahlen mit − / + statt Freitext: Schritte aus einer Liste sinnvoller Werte, Einheit gleich in der Anzeige
+// Numbers with − / + instead of free text: steps from a list of sensible values, unit right in the display
 const dur = (m) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m / 60} h`);
-// bis 1 h in 5 min, bis 6 h in 15 min, darüber in 30 min; genauer per Antippen des Werts
+// up to 1 h in 5 min, up to 6 h in 15 min, beyond in 30 min; finer by tapping the value
 const DURS = [1, 2, 3, 4, ...Array.from({ length: 12 }, (_, i) => 5 + i * 5), ...Array.from({ length: 20 }, (_, i) => 75 + i * 15), ...Array.from({ length: 36 }, (_, i) => 390 + i * 30)];
 const WATTS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 120, 150, 200, 250, 300, 400, 500, 600, 800, 1000, 1200, 1500, 2000, 2500, 3000];
 const range = (a, b, st) => Array.from({ length: Math.round((b - a) / st) + 1 }, (_, i) => Math.round((a + i * st) * 10) / 10);
@@ -297,14 +297,14 @@ const STEPS = {
   lux: [[0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200, 300, 500], (x) => `${x} lx`],
   tcorr: [range(-10, 10, 0.5), (t) => `${t > 0 ? '+' : t < 0 ? '−' : ''}${String(Math.abs(t)).replace('.', ',')} °C`],
 };
-// path: Einstellung (z. B. timer.mins) oder a:feld für die gerade offene Power Action
+// path: setting (e.g. timer.mins) or a:field for the currently open Power Action
 const stepper = (path, list, v, label) => {
   const [vals, fmt] = STEPS[list];
   return `<span class="stp" role="group" aria-label="${esc(label)}"><button type="button" data-step="${path}" data-list="${list}" data-dir="-1" aria-label="weniger" ${v <= vals[0] ? 'disabled' : ''}>−</button>`
     + `<button type="button" class="stpv" data-stpedit="${path}" data-list="${list}" data-v="${v}" aria-label="${esc(label)}: ${fmt(v)}, antippen zum Eintippen">${fmt(v)}</button><button type="button" data-step="${path}" data-list="${list}" data-dir="1" aria-label="mehr" ${v >= vals[vals.length - 1] ? 'disabled' : ''}>+</button></span>`;
 };
 const srow = (label, ctrl, sub = '') => `<div class="row"><span class="tx"><b>${label}</b>${sub ? `<span>${sub}</span>` : ''}</span>${ctrl}</div>`;
-// Eintippen: Dauern als Std:Min, sonst Zahl; auf den erlaubten Bereich begrenzt, nicht auf die Schritte
+// Typing: durations as h:min, else a number; clamped to the allowed range, not to the steps
 const stpParse = (list, raw) => {
   const vals = STEPS[list][0], t = String(raw).trim().replace(',', '.');
   let v = /^dur/.test(list) && t.includes(':') ? t.split(':').reduce((h, m) => h * 60 + Number(m), 0) : Number(t);
@@ -322,11 +322,11 @@ const nextStep = (list, v, dir) => { const vals = STEPS[list][0]; return dir > 0
 const val = (t) => `<span class="val">${t}</span>`;
 const chev = (t = '') => `<span class="val">${t} ›</span>`;
 
-// Statuszeile unter dem Namen, ohne die Leistung, die schon gross darüber steht
+// Status line below the name, without the power already shown large above it
 const subOf = (d) => (!d.online ? d.status : d.relay ? d.status.replace(/^[\d.,]+ k?W( · )?/, '') : d.status === 'Aus' ? '' : d.status.replace(/^Aus · /, ''));
 
-// ---------- Startseite ----------
-// Reihenfolge der Kacheln: gespeicherte zuerst, neue (z. B. eine neue Steckdose) hinten an
+// ---------- Home page ----------
+// Tile order: saved ones first, new ones (e.g. a new plug) appended at the end
 const HOME_KEYS = [['scenes', 'Szenen', 'scenes'], ['rules', 'Regeln', 'rules'], ['guard', 'Ferien', 'beach'], ['energy', 'Verbrauch', 'bolt'], ['alarms', 'Alarme', 'bell']];
 function homeOrder() {
   const all = [...HOME_KEYS.map(([k]) => k), ...S.devices.map((d) => d.mac)], o = (S.settings.order || []).filter((k) => all.includes(k));
@@ -340,13 +340,13 @@ function orderHTML() {
     <button type="button" class="btn grey" data-orderreset="1">Standard-Reihenfolge</button>`;
 }
 const saveOrder = async (order) => { S.settings.order = order; render(); try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { order } }) }); } catch (x) { toast(x.message, true); } };
-// Ziehen am Griff: Zeile folgt dem Finger, die anderen weichen aus; beim Loslassen speichern
+// Dragging the handle: row follows the finger, the others make room; save on release
 let drag = null;
 app.addEventListener('pointerdown', (e) => {
   const h = e.target.closest('[data-handle]'); if (!h) return;
   const row0 = h.closest('[data-okey]'), rows = [...row0.parentElement.children];
   drag = { row: row0, rows, from: rows.indexOf(row0), to: rows.indexOf(row0), y: e.clientY, h: row0.offsetHeight, id: e.pointerId };
-  try { h.setPointerCapture(e.pointerId); } catch { /* ohne Zeiger-Erfassung weiter */ } row0.classList.add('dragging'); haptic(); e.preventDefault();
+  try { h.setPointerCapture(e.pointerId); } catch { /* continue without pointer capture */ } row0.classList.add('dragging'); haptic(); e.preventDefault();
 });
 app.addEventListener('pointermove', (e) => {
   if (!drag || e.pointerId !== drag.id) return;
@@ -372,8 +372,8 @@ app.addEventListener('keydown', (e) => {
   keys.splice(i, 1); keys.splice(j, 0, k); saveOrder(keys).then(() => $(`[data-okey="${k}"] [data-handle]`)?.focus());
 });
 function homeHTML() {
-  // Aufbau wie die Startseite der myStrom-App: zuerst Szenen, Regeln, Ferien (Home Guard), Verbrauch, Alarme, dann die Steckdosen.
-  // Steckdosen-Kacheln ohne Pfeil und ohne Statuszeile; Watt mit einer Nachkommastelle wie im Original.
+  // Layout like the myStrom app home page: first scenes, rules, vacation (Home Guard), consumption, alarms, then the plugs.
+  // Plug tiles without arrow and without status line; watts with one decimal like in the original.
   const hint = '';
   const tile = (h, icon, label) => `<button type="button" class="tile" data-go="${h}" data-okey="${h}"><span class="ico">${icon}</span><span class="lb">${label}</span></button>`;
   const T = {};
@@ -395,15 +395,15 @@ function homeHTML() {
     </div>${hint}`;
 }
 
-// ---------- Gerät ----------
-// Steckdose als Linien-Symbol wie die übrigen Symbole; die LED unten zeigt den Zustand (grün an, rot aus, grau offline)
+// ---------- Device ----------
+// Plug as a line icon like the other icons; the LED at the bottom shows the state (green on, red off, grey offline)
 const sockIcon = (d) => `<svg viewBox="0 0 64 64" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="18" y="5" width="28" height="54" rx="13"/><circle cx="32" cy="24" r="9"/><circle cx="28.5" cy="23" r="1.3" fill="currentColor"/><circle cx="35.5" cy="23" r="1.3" fill="currentColor"/><circle cx="32" cy="28" r="1.3" fill="currentColor"/><path class="led ${!d.online ? 'off-line' : d.relay ? 'on' : 'off'}" d="M28 48h8" stroke-width="3"/></svg>`;
-// Lampe: Symbol in der eingestellten Farbe, solange sie an ist
+// Bulb: icon in the set color while it is on
 const hsvCss = (h, sat, v) => `hsl(${h} ${Math.round(sat * 0.85)}% ${Math.round(45 + (100 - sat) * 0.3 + v * 0.1)}%)`;
 const bulbTint = (d) => { if (d.kind !== 'bulb' || !d.relay || !d.color) return ''; const [h, sat, v] = d.color.split(';').map(Number); return Number.isFinite(h) ? ` style="color:${hsvCss(h, sat, v)}"` : ''; };
-// Kurzzeile je Art (Menü, Listen)
+// Short line per type (menu, lists)
 const kindSub = (d) => (d.kind === 'button' ? (d.battery != null ? `Batterie ${d.battery} %` : d.status) : d.kind === 'motion' ? (d.online ? d.status : 'offline') : !d.online ? 'offline' : d.relay ? pw(d.w) : 'aus');
-// Taster und Bewegungsmelder auf der Startseite: Kachel mit Zustand statt Schalter
+// Buttons and motion sensors on the home page: tile with state instead of a switch
 function infoTile(d) {
   const live = d.kind === 'motion' && d.motion;
   const sub = d.kind === 'button' ? (d.battery != null ? `Batterie ${d.battery} %` : 'noch nie gedrückt') : !d.online ? 'Offline' : d.motion ? 'Bewegung' : d.light != null ? `${d.light} lx` : '–';
@@ -413,7 +413,7 @@ function infoTile(d) {
 const BTN = [['single', 'Einmal drücken'], ['double', 'Zweimal drücken'], ['long', 'Lang drücken'], ['touch', 'Berühren']];
 const btnText = (a) => (a.do === 'none' ? 'nichts' : a.do === 'scene' ? `Szene ${S.scenes.find((x) => x.id === a.scene)?.name || '?'}`
   : `${dev(a.mac)?.name || '?'} ${{ toggle: 'umschalten', on: 'ein', off: 'aus' }[a.do]}`);
-// Lampe: Farben zum Antippen (Farbton, Sättigung) und Helligkeit
+// Bulb: tappable colors (hue, saturation) and brightness
 const SWATCHES = [['Warmweiss', 30, 35], ['Weiss', 40, 8], ['Kaltweiss', 210, 10], ['Rot', 0, 100], ['Orange', 25, 100], ['Gelb', 50, 100], ['Grün', 120, 90], ['Türkis', 180, 90], ['Blau', 225, 95], ['Violett', 275, 85], ['Pink', 320, 80]];
 function lightHTML(d) {
   const l = d.cfg.light;
@@ -449,7 +449,7 @@ function deviceHTML(d) {
       ${FEAT.filter(([k]) => d.kind === 'switch' || k !== 'temp').map(([k, ic, l], i) => (d.kind === 'bulb' && i === 1 ? `</div>${lightHTML(d)}<div class="grid">` : '') + (() => { const [on, txt] = featInfo(d, k); return `<button type="button" class="tile feat ${on ? 'act' : ''}" data-go="dev/${d.mac}/${k}"><span class="ico">${I[ic]}</span><span class="lb">${l}</span><span class="sub">${on || k === 'eval' ? esc(txt) : 'aus'}</span></button>`; })()).join('')}
     </div>`;
 }
-// Power Actions: „wenn über/unter X W, mindestens Y min, dann …“
+// Power Actions: "if above/below X W for at least Y min, then …"
 const ACT_THEN = [['notify', 'Mitteilung'], ['off', 'Ausschalten'], ['other-on', 'Andere an'], ['other-off', 'Andere aus']];
 function actText(a) {
   const t = dev(a.target)?.name || 'andere Steckdose';
@@ -485,7 +485,7 @@ function actionsHTML(d, id) {
     <p class="note">${a.when === 'below' ? `Löst aus, wenn ${esc(d.name)} ${a.mins} Minuten lang unter ${a.watts} W zieht, aber erst nachdem es darüber gelaufen ist. Danach erst wieder nach dem nächsten Lauf.` : `Löst aus, wenn ${esc(d.name)} ${a.mins} Minuten lang über ${a.watts} W zieht. Erst wieder, nachdem es zwischendurch darunter war.`}</p>
     <button type="button" class="btn danger" data-adel="${a.id}">Power Action löschen</button>`;
 }
-// Lampe: Farbe/Helligkeit sofort anzeigen, dann senden (schaltet ein)
+// Bulb: show color/brightness immediately, then send (turns it on)
 async function setLight(mac, l) {
   const d = dev(mac); d.cfg.light = { ...d.cfg.light, ...l }; d.relay = true; d.color = `${d.cfg.light.h};${d.cfg.light.s};${d.cfg.light.v}`; render();
   try { Object.assign(d, await api(`api/devices/${mac}/light`, { method: 'POST', body: JSON.stringify(d.cfg.light) })); render(); } catch (e) { toast(e.message, true); load(); }
@@ -493,12 +493,12 @@ async function setLight(mac, l) {
 const updSch = (mac, fn) => saveCfg(mac, { schedule: { entries: dev(mac).cfg.schedule.entries.map(fn).filter(Boolean) } });
 const updAct = (mac, id, patch) => saveCfg(mac, { actions: dev(mac).cfg.actions.map((a) => (a.id === id ? { ...a, ...patch } : a)) });
 function featureHTML(d, k, sub) {
-  const c = d.cfg, back = k === 'tech' || k === 'room' || k === 'icon' ? `dev/${d.mac}/settings` : `dev/${d.mac}`; // roomnew hat eigenes Zurück
+  const c = d.cfg, back = k === 'tech' || k === 'room' || k === 'icon' ? `dev/${d.mac}/settings` : `dev/${d.mac}`; // roomnew has its own Back
   const head = HD(FTITLE[k], back, '<span></span>', esc(d.name));
   const dim = (on) => (on ? 'ls' : 'ls dim');
   switch (k) {
     case 'btn': {
-      // eine Taster-Aktion: was passiert, welches Gerät oder welche Szene; ausprobieren ohne zu drücken
+      // a button action: what happens, which device or scene; try it out without pressing
       const a = c.button[sub] || c.button.single, l = BTN.find(([x]) => x === sub)?.[1] || '';
       const chip = (v, t) => `<button type="button" class="chip" data-btndo="${sub}|${v}" aria-pressed="${a.do === v}">${t}</button>`;
       return HD(l, `dev/${d.mac}`, '<span></span>', esc(d.name)) + `<p class="sec">Was passiert</p>
@@ -508,7 +508,7 @@ function featureHTML(d, k, sub) {
         ${a.do !== 'none' ? `<button type="button" class="btn grey" data-btntest="${sub}">Jetzt ausprobieren</button>` : ''}`;
     }
     case 'schedule': {
-      // je Zeitplan: Ein, Aus, Tage. Tage eines anderen Zeitplans sind hier nicht wählbar (jeder Tag nur einmal)
+      // per schedule: on, off, days. Days of another schedule can't be chosen here (each day only once)
       const s = c.schedule, taken = (id) => s.entries.filter((e) => e.id !== id).flatMap((e) => e.days), free = WD.filter(([n]) => !s.entries.some((e) => e.days.includes(n)));
       return head + `<p class="intro">Schaltet zu festen Zeiten ein und aus. Für andere Tage mit anderen Zeiten fügst du einen weiteren Zeitplan hinzu.</p>
       ${s.on && /wartet|aus in/.test(d.status) ? `<p class="note"><b>Jetzt:</b> ${esc(d.status)}</p>` : ''}
@@ -566,7 +566,7 @@ function featureHTML(d, k, sub) {
       ${canSwitch(d) ? `<div class="ls"><div class="row"><span class="tx"><b>Tastensperre</b><span>in der App nicht mehr schaltbar</span></span>${sw('lock', c.lock, 'Tastensperre')}</div></div>` : ''}
       <button type="button" class="btn danger" data-remove="${d.mac}">${d.kind === 'switch' ? 'Steckdose' : 'Gerät'} entfernen</button>`;
     case 'room': {
-      // wie „Select Room“ in myStrom: benutzte Räume zuerst, dann Vorlagen mit „Neu“; der gewählte abgedunkelt mit Häkchen
+      // like "Select Room" in myStrom: used rooms first, then presets with "New"; the selected one dimmed with a checkmark
       const used = [...new Set(S.devices.map((x) => x.cfg.room).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));
       const tileR = (r, icon, label, isNew) => `<button type="button" class="tile room ${c.room === r ? 'sel' : ''}" data-room="${esc(r)}" aria-pressed="${c.room === r}">
         <span class="ico">${icon}${c.room === r ? '<span class="chk" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 12 4 4 8-8"/></svg></span>' : ''}</span>
@@ -579,7 +579,7 @@ function featureHTML(d, k, sub) {
       </div>`;
     }
     case 'icon': {
-      // wie die Raum-Auswahl: Kacheln, gewähltes abgedunkelt mit Häkchen; Antippen wählt und geht zurück
+      // like the room picker: tiles, selected one dimmed with a checkmark; tapping selects and goes back
       const curKey = iconKey(d);
       return HD('Symbol wählen', back) + `<div class="grid">${DEV_ICONS.map(([k, l, svg]) => `<button type="button" class="tile room ${curKey === k ? 'sel' : ''}" data-icon="${k}" aria-pressed="${curKey === k}">
         <span class="ico">${svg || I.plug}${curKey === k ? '<span class="chk" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 12 4 4 8-8"/></svg></span>' : ''}</span>
@@ -594,9 +594,9 @@ function featureHTML(d, k, sub) {
   }
 }
 
-// ---------- Verbrauch: Diagramm wie in myStrom (Watt, Max-Linie, Uhrzeiten), Gerät und Tag wählbar ----------
+// ---------- Consumption: chart like in myStrom (watts, max line, times), device and day selectable ----------
 const view = { mac: 'all', day: null, period: 'day' };
-// view.mac: 'all', ein Gerät oder mehrere mit Komma
+// view.mac: 'all', one device or several comma-separated
 const pickedMacs = (m) => (m === 'all' ? SW().map((d) => d.mac) : m.split(',').filter((x) => dev(x)));
 const pickedName = (m) => { if (m === 'all') return 'Alle Geräte'; const n = pickedMacs(m).map((x) => dev(x).name); return n.length > 2 ? `${n.length} Geräte` : n.join(' + '); };
 const PERIODS = [['day', 'Tag'], ['week', 'Woche'], ['month', 'Monat'], ['year', 'Jahr']];
@@ -627,7 +627,7 @@ async function barData(mac, period, ref) {
   bars.set(k, { at: Date.now(), data });
   return data;
 }
-// Balken wie das Flächendiagramm: kWh links, Beschriftung unten, aktueller Abschnitt grün
+// Bars like the area chart: kWh on the left, labels at the bottom, current segment green
 function barSVG(b) {
   const n = b.bars.length, W0 = 38, W1 = 316, H0 = 14, H1 = 190, vals = b.bars.map((x) => (x.wh || 0) / 1000), max = Math.max(0.01, ...vals);
   const step = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500].find((s) => max / s <= 5) || 1000, top = Math.ceil(max * 1.08 / step) * step;
@@ -668,7 +668,7 @@ function areaSVG(c) {
   const n = c.w.length, W0 = 38, W1 = 316, H0 = 14, H1 = 190, vals = c.w.filter((w) => w != null), max = Math.max(1, ...vals);
   const step = [5, 10, 20, 30, 50, 100, 200, 500, 1000, 2000].find((s) => max / s <= 5) || 2000, top = Math.ceil(max * 1.08 / step) * step;
   const x = (i) => W0 + (W1 - W0) * i / (n - 1), y = (w) => H1 - (H1 - H0) * w / top;
-  // Lücken (keine Messung) unterbrechen die Fläche
+  // Gaps (no measurement) break the area
   const segs = []; let cur = [];
   c.w.forEach((w, i) => { if (w == null) { if (cur.length) segs.push(cur); cur = []; } else cur.push([x(i), y(w)]); });
   if (cur.length) segs.push(cur);
@@ -686,7 +686,7 @@ function areaSVG(c) {
 function chartHTML(mac, pick) {
   view.day ||= S.today;
   if (!pick) view.mac = mac;
-  if (pick && view.mac !== 'all' && !pickedMacs(view.mac).length) view.mac = 'all'; // gewähltes Gerät entfernt
+  if (pick && view.mac !== 'all' && !pickedMacs(view.mac).length) view.mac = 'all'; // selected device removed
   const m = pick ? view.mac : mac;
   const now = pickedMacs(m).reduce((a, x) => a + dev(x).w, 0), [v, u] = pwN(now);
   const p = view.period, ps = periodStart(p, view.day), current = periodStart(p, S.today) === ps, key = `${m}|${p}|${ps}`, live = current ? `|${Math.floor(S.now / 60e3)}` : '';
@@ -697,7 +697,7 @@ function chartHTML(mac, pick) {
     <div class="chart" data-chart="${key}" data-keep="${key}${live}"><div class="empty">Lädt …</div></div>
     <div class="foot" data-foot data-keep="${key}${live}"><div><b>–<small> kWh</small></b><span>Verbrauch</span></div><i></i><div><b>–<small> CHF</small></b><span>Kosten</span></div></div>`;
 }
-// ---------- Temperaturverlauf ----------
+// ---------- Temperature history ----------
 const tview = { period: 'day', day: null };
 const TPERIODS = [['day', 'Tag'], ['week', 'Woche'], ['month', 'Monat']];
 const deg = (v) => (v == null ? '–' : v.toFixed(1));
@@ -718,7 +718,7 @@ async function tempData(mac, period, ref) {
   temps.set(k, { at: Date.now(), data });
   return data;
 }
-// gemeinsame Achse: auf ganze Grad mit etwas Luft, Schwelle „Aus über“ nur wenn sie in der Nähe liegt
+// shared axis: whole degrees with some margin, "off above" threshold only if it is close by
 function tempAxis(lo, hi, limit) {
   if (limit != null && limit <= hi + 6) hi = Math.max(hi, limit);
   lo = Math.floor(lo - 1); hi = Math.ceil(hi + 1);
@@ -742,7 +742,7 @@ function tempSVG(t, limit) {
       ${['00:00', '06:00', '12:00', '18:00', '24:00'].map((l, k) => `<text x="${W0 + (W1 - W0) * k / 4}" y="${H1 + 16}" text-anchor="${k === 0 ? 'start' : k === 4 ? 'end' : 'middle'}" font-size="9" fill="#bdbdbd">${l}</text>`).join('')}
       <line class="cur" x1="0" x2="0" y1="${H0}" y2="${H1}" stroke="#5ab400" stroke-width="1" visibility="hidden"/></svg>`;
   }
-  // Woche/Monat: Spanne vom Tiefst- zum Höchstwert je Tag, Strich beim Mittel
+  // Week/month: range from min to max per day, tick at the mean
   const n = t.days.length, slot = (W1 - W0) / n, bw = Math.max(3, Math.min(14, slot * 0.5));
   return `<svg viewBox="0 0 320 214" role="img" aria-label="Temperatur je Tag, ${deg(t.min)} bis ${deg(t.max)} °C">${gridSVG}${lim}
     ${t.days.map((dd, i) => { if (dd.min == null) return ''; const cx = W0 + slot * (i + 0.5), top = y(dd.max), h = Math.max(bw, y(dd.min) - top);
@@ -752,7 +752,7 @@ function tempSVG(t, limit) {
     ${t.days.map((dd, i) => (t.period === 'week' || i === 0 || (i + 1) % 5 === 0 ? `<text x="${(W0 + slot * (i + 0.5)).toFixed(1)}" y="${H1 + 14}" text-anchor="middle" font-size="9" fill="#bdbdbd">${dd.label}</text>` : '')).join('')}
   </svg>`;
 }
-// Finger oder Maus übers Diagramm: Uhrzeit bzw. Tag mit Temperatur
+// Finger or mouse over the chart: time or day with temperature
 function tempTip(el, t) {
   const svg = $('svg', el), cur = $('.cur', svg); let tip = $('.tip', el);
   const show = (e) => {
@@ -776,7 +776,7 @@ function tempTip(el, t) {
   svg.addEventListener('pointermove', show); svg.addEventListener('pointerdown', show); svg.addEventListener('pointerleave', hide);
 }
 function totalsHTML(mac) { return `<div class="ls" data-totals="${mac}" data-keep="${mac}|${Math.floor(S.now / 60e3)}"></div>`; }
-// Diagramm und Summen nachladen, nachdem die Seite steht
+// Load chart and totals once the page is in place
 async function fillCharts() {
   for (const el of document.querySelectorAll('[data-chart]:not([data-filled])')) {
     const [m, period, day] = el.dataset.chart.split('|'), key = el.dataset.keep;
@@ -817,10 +817,10 @@ async function fillCharts() {
       if (!el.isConnected) return;
       el.innerHTML = [['Diese Woche', t.week], ['Dieser Monat', t.month], ['Dieses Jahr', t.year], [t.since ? `Seit ${new Date(t.since).toLocaleDateString('de-CH')}` : 'Gesamt', t.all]]
         .map(([l, wh]) => row(l, val(`${kwh(wh)} kWh · CHF ${chf(wh)}`))).join('');
-    } catch { /* bleibt leer */ }
+    } catch { /* stays empty */ }
   }
 }
-// Finger oder Maus übers Diagramm: Uhrzeit und Leistung an dieser Stelle
+// Finger or mouse over the chart: time and power at that point
 function chartTip(el, c) {
   const svg = $('svg', el), cur = $('.cur', svg); let tip = $('.tip', el);
   const show = (e) => {
@@ -835,7 +835,7 @@ function chartTip(el, c) {
   const hide = () => { cur?.setAttribute('visibility', 'hidden'); tip?.remove(); tip = null; };
   svg.addEventListener('pointermove', show); svg.addEventListener('pointerdown', show); svg.addEventListener('pointerleave', hide);
 }
-// Geräte für den Verbrauch wählen: Overlay von unten mit Kacheln wie auf der Startseite; mehrere wählbar (Summe), gewählte mit Häkchen
+// Choose devices for consumption: bottom sheet with tiles like the home page; multiple selectable (sum), selected with checkmark
 function devPickTiles() {
   const chk = '<span class="chk" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 12 4 4 8-8"/></svg></span>';
   const picked = view.mac === 'all' ? ['all', ...SW().map((d) => d.mac)] : view.mac.split(',');
@@ -853,7 +853,7 @@ function energyHTML() {
     + (pickedMacs(m).length > 1 ? `<p class="sec">Heute je Gerät</p><div class="ls">${pickedMacs(m).map(dev).map((d) => row(esc(d.name), chev(`${kwh(d.todayWh)} kWh`), '', `data-go="dev/${d.mac}/eval"`)).join('')}</div>` : '')
     + `<button type="button" class="btn grey" data-go="export">Exportieren (CSV)</button>`;
 }
-// Export: Gerät, Zeitraum und Auflösung wählen, dann als CSV herunterladen (öffnet sich in Excel oder Numbers)
+// Export: choose device, period and resolution, then download as CSV (opens in Excel or Numbers)
 const exp = { mac: null, from: null, to: null, res: 'hour' };
 function exportHTML() {
   exp.mac ??= view.mac; exp.from ||= `${S.today.slice(0, 7)}-01`; exp.to ||= S.today;
@@ -873,7 +873,7 @@ function exportHTML() {
 }
 const lastOfMonth = (ym) => { const [y, m] = ym.split('-').map(Number); return `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`; };
 
-// ---------- Szenen ----------
+// ---------- Scenes ----------
 function scenesHTML() {
   return HD('Szenen', 'home') + '<p class="intro">Mehrere Steckdosen mit einem Tipp schalten.</p>'
     + `<div class="ls">${S.scenes.map((s) => { const n = Object.keys(s.actions).length; return `<div class="row"><button type="button" class="tx" data-go="scene/${s.id}" style="text-align:left;flex:1"><b>${esc(s.name)}</b><span>${n ? Object.entries(s.actions).map(([mac, a]) => `${esc(dev(mac)?.name || '?')} ${a === 'on' ? 'an' : 'aus'}`).join(', ') : 'alle Steckdosen aus'}${s.time?.on ? ` · ${daysText(s.time.days)} ${s.time.at}` : ''}</span></button>
@@ -896,7 +896,7 @@ function sceneHTML(id) {
 }
 const saveScenes = async () => { try { S.scenes = await api('api/scenes', { method: 'PUT', body: JSON.stringify({ scenes: S.scenes }) }); render(); } catch (e) { toast(e.message, true); } };
 
-// ---------- Ferien (alle Steckdosen), Regeln, Alarme, Mehr ----------
+// ---------- Vacation (all plugs), rules, alarms, more ----------
 function guardHTML() {
   return HD('Ferien', 'home') + '<p class="intro">Ferienmodus aller Steckdosen auf einen Blick. Eingeschaltet geht eine Steckdose in den Ferien morgens und abends zu wechselnden Zeiten an, damit das Haus bewohnt wirkt.</p>'
     + `<div class="ls">${SW().map((d) => { const v = d.cfg.vacation, today = d.vacationToday.map((s) => `${s.key} ${s.start}`).join(', ');
@@ -926,12 +926,12 @@ function eventsHTML() {
     const when = t.toDateString() === new Date().toDateString() ? t.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : t.toLocaleDateString('de-CH', { day: 'numeric', month: 'numeric' });
     return `<div class="row ev"><time>${when}</time><span class="tx"><b>${esc(d?.name || e.mac)} ${e.kind === 'on' ? 'an' : e.kind === 'off' ? 'aus' : ''}</b><span>${e.kind === 'alarm' ? '⚠︎ ' : ''}${esc(e.text)}</span></span></div>`; }).join('');
 }
-// Design: "Modern" (Standard) oder "myStrom" wie die Original-App; gilt pro Gerät
+// Design: "Modern" (default) or "myStrom" like the original app; applies per device
 const design = () => (store.get('design') === 'mystrom' ? 'mystrom' : 'modern');
 function setDesign(v) {
   store.set('design', v);
   const l = document.getElementById('theme-modern'); if (l) l.disabled = v === 'mystrom';
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', v === 'mystrom' ? '#000000' : '#131920'); // Statusleiste wie die Kopfzeile
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', v === 'mystrom' ? '#000000' : '#131920'); // Status bar like the header
   app.dataset.page = ''; render();
 }
 function moreHTML() {
@@ -948,10 +948,10 @@ function moreHTML() {
     <p class="sec">Über</p><div class="ls">${row('Läuft lokal', val('ohne Konto'), 'Alle Funktionen von myStrom PLUS, PRO, DATA PRO und HOME GUARD, gratis. Daten bleiben bei dir.')}</div>`;
 }
 
-// ---------- Zeichnen ----------
+// ---------- Rendering ----------
 let swipe = null;
-// Bestehende Knoten an das neue HTML angleichen statt alles zu ersetzen: kein Flackern, Fokus und Diagramme bleiben.
-// Elemente mit data-keep behalten ihren Inhalt, solange der Schlüssel gleich ist (Diagramm, Summen, Verlauf).
+// Patch existing nodes to match the new HTML instead of replacing everything: no flicker, focus and charts persist.
+// Elements with data-keep keep their content as long as the key is unchanged (chart, totals, history).
 function morph(a, b) {
   for (const at of [...a.attributes]) if (!b.hasAttribute(at.name) && at.name !== 'data-filled' && at.name !== 'style') a.removeAttribute(at.name);
   for (const at of b.attributes) if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
@@ -981,9 +981,9 @@ function render(fresh = false) {
   if (r0 === 'alarms' && !events) api('api/events?n=40').then((e) => { events = e; const el = $('[data-events]'); if (el) el.innerHTML = eventsHTML(); });
 }
 
-// ---------- Wischen auf den Kacheln: wie zur nächsten Seite blättern ----------
-// Die aktuelle Kachel schiebt sich mit dem Finger hinaus, von der anderen Seite kommt die nächste:
-// grün „AN“ oder rot „AUS“. Über die halbe Breite rastet sie ein und schaltet, sonst federt sie zurück.
+// ---------- Swiping on tiles: like flipping to the next page ----------
+// The current tile slides out with the finger, the next one comes in from the other side:
+// green "AN" (on) or red "AUS" (off). Past half the width it snaps and toggles, otherwise it springs back.
 const POWER = '<svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v9M6.3 6.8a8 8 0 1 0 11.4 0"/></svg>';
 let swiped = 0;
 function nextPanel(tile, on, name) {
@@ -993,18 +993,18 @@ function nextPanel(tile, on, name) {
   n.innerHTML = `${POWER}<b>${on ? 'AN' : 'AUS'}</b><span>${esc(name)}</span>`;
   return n;
 }
-// Seite und Gegenstück an die Fingerposition setzen (x in px, positiv = nach rechts)
+// Set page and counterpart to the finger position (x in px, positive = to the right)
 function place(tile, x, animate) {
   const face = tile.querySelector('.face'), n = tile.querySelector('.next'), w = tile.offsetWidth, t = animate ? 'transform .22s cubic-bezier(.2,.8,.2,1)' : 'none';
   face.style.transition = t; face.style.transform = x ? `translateX(${x}px)` : '';
   if (n) { n.style.transition = t; n.style.transform = `translateX(${x - Math.sign(x || 1) * w}px)`; }
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-// fertig blättern, die neue Seite kurz zeigen, dann schalten und in die normale Kachel übergehen
+// finish flipping, briefly show the new page, then toggle and turn back into the normal tile
 async function flip(tile, d, sign) {
   const w = tile.offsetWidth;
   nextPanel(tile, !d.relay, d.name);
-  if (!tile.querySelector('.next').style.transform) place(tile, 0.001 * sign, false); // Start ausserhalb, falls per Tippen
+  if (!tile.querySelector('.next').style.transform) place(tile, 0.001 * sign, false); // start outside, in case of a tap
   await wait(20);
   place(tile, sign * w, true);
   await wait(420);
@@ -1019,23 +1019,23 @@ app.addEventListener('pointerdown', (e) => {
   const b = e.target.closest('[data-swipe]'); if (!b || swipe || editHome) return;
   swipe = { b, tile: b.closest('.tile'), x: e.clientX, y: e.clientY, dx: 0, id: e.pointerId, live: false };
 });
-// Sicherheitsnetz: bleibt ein Wischen hängen (z. B. Finger verlässt das Fenster), nach 3 s freigeben
+// Safety net: if a swipe gets stuck (e.g. finger leaves the window), release after 3 s
 setInterval(() => { if (swipe && !swipe.busy && !document.querySelector(':active')) { place(swipe.tile, 0, false); swipe.tile.querySelector('.next')?.remove(); swipe = null; } }, 3000);
 app.addEventListener('pointermove', (e) => {
   if (!swipe || swipe.busy || e.pointerId !== swipe.id) return;
   const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
   if (!swipe.live) {
-    if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { swipe = null; return; } // senkrecht = scrollen
+    if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { swipe = null; return; } // vertical = scrolling
     if (Math.abs(dx) < 8) return;
     swipe.live = true;
     const d = dev(swipe.b.dataset.swipe);
     swipe.blocked = d.cfg.lock || !d.online;
     if (!swipe.blocked) nextPanel(swipe.tile, !d.relay, d.name);
   }
-  // gesperrt oder offline: nur ein kurzes, gebremstes Mitgehen; sonst höchstens eine Kachelbreite, kurz vor dem Ende gebremst
+  // locked or offline: only a short, damped follow; otherwise at most one tile width, damped near the end
   const w = swipe.tile.offsetWidth, a = Math.abs(dx), soft = w * 0.85;
   const x = swipe.blocked ? Math.sign(dx) * Math.min(24, a / 4) : Math.sign(dx) * Math.min(w, a < soft ? a : soft + (a - soft) * 0.3);
-  // Geschwindigkeit (px/ms, geglättet) für schnelles Wischen
+  // velocity (px/ms, smoothed) for fast swipes
   if (swipe.lt) swipe.v = 0.6 * (swipe.v || 0) + 0.4 * ((x - swipe.dx) / Math.max(1, e.timeStamp - swipe.lt));
   swipe.lt = e.timeStamp; swipe.dx = x;
   place(swipe.tile, x, false);
@@ -1046,13 +1046,13 @@ const snapBack = (s) => { s.busy = true; place(s.tile, 0, true); setTimeout(() =
 const endSwipe = (e) => {
   if (!swipe || swipe.busy) return;
   const s = swipe;
-  if (!s.live) { swipe = null; return; } // war ein Tippen
+  if (!s.live) { swipe = null; return; } // was a tap
   swiped = Date.now();
-  // übernimmt der Browser die Geste (z. B. zum Scrollen), nie schalten, sondern zurückfedern
+  // if the browser takes over the gesture (e.g. for scrolling), never toggle, spring back instead
   if (e?.type === 'pointercancel') { snapBack(s); return; }
   const d = dev(s.b.dataset.swipe), w = s.tile.offsetWidth;
   if (s.blocked) { place(s.tile, 0, true); swipe = null; shake(s.tile); haptic([8, 60, 8]); toast(d.cfg.lock ? `${d.name}: Tastensperre ist an` : `${d.name} ist nicht erreichbar`, !d.cfg.lock); return; }
-  // weit genug gezogen, oder kurz und schnell in dieselbe Richtung geschnippt (Finger zuletzt noch in Bewegung)
+  // dragged far enough, or flicked short and fast in the same direction (finger still moving at the end)
   const moving = e && s.lt && e.timeStamp - s.lt < 90, v = moving ? s.v || 0 : 0;
   const flick = Math.abs(v) > 0.45 && Math.sign(v) === Math.sign(s.dx) && Math.abs(s.dx) > w * 0.12;
   if (Math.abs(s.dx) >= w * 0.4 || flick) { s.busy = true; store.set('swiped', '1'); haptic(); flip(s.tile, d, Math.sign(s.dx)); }
@@ -1060,7 +1060,7 @@ const endSwipe = (e) => {
 };
 app.addEventListener('pointerup', endSwipe);
 app.addEventListener('pointercancel', endSwipe);
-addEventListener('pointerup', endSwipe); // auch ausserhalb der App losgelassen
+addEventListener('pointerup', endSwipe); // also released outside the app
 
 function tapFlip(el, d) {
   const tile = el.closest('.tile');
@@ -1068,9 +1068,9 @@ function tapFlip(el, d) {
   if (swipe) return;
   swipe = { b: el, tile, busy: true, live: true, dx: 0 };
   haptic();
-  flip(tile, d, d.relay ? -1 : 1); // aus: nach links weg, an: nach rechts
+  flip(tile, d, d.relay ? -1 : 1); // off: away to the left, on: to the right
 }
-// Menü von links: Bereiche, Steckdosen mit Zustand, Startseite anordnen, Einstellungen. Schliesst mit Tippen daneben, Esc oder nach links wischen.
+// Menu from the left: sections, plugs with state, arrange home page, settings. Closes by tapping outside, Esc or swiping left.
 function openMenu() {
   if (document.querySelector('.drawer')) return;
   const el = document.createElement('div'), total = SW().reduce((a, d) => a + d.w, 0);
@@ -1092,7 +1092,7 @@ function openMenu() {
     else if (e.target.closest('[data-nedit]')) { close(); if (cur() !== 'home' && cur() !== '') back('home'); setTimeout(enterEdit, 280); }
     else if (e.target.closest('[data-close]')) close();
   });
-  // nach links wischen schliesst; das Menü folgt dem Finger
+  // swiping left closes; the menu follows the finger
   const panel = el.querySelector('.drawer-panel'); let x0 = null, dx = 0;
   panel.addEventListener('pointerdown', (e) => { x0 = e.clientX; dx = 0; });
   panel.addEventListener('pointermove', (e) => { if (x0 == null) return; dx = Math.min(0, e.clientX - x0); if (dx < -6) { panel.style.transition = 'none'; panel.style.transform = `translateX(${dx}px)`; } });
@@ -1114,7 +1114,7 @@ function openDevPick() {
     const o = e.target.closest('[data-pickdev]');
     if (o) {
       haptic();
-      const v = o.dataset.pickdev, cur = pickedMacs(view.mac); // bei „Alle“ sind alle gewählt, Antippen nimmt eines weg
+      const v = o.dataset.pickdev, cur = pickedMacs(view.mac); // with "All" everything is selected, tapping removes one
       const next = v === 'all' ? [] : cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
       const ordered = SW().map((d) => d.mac).filter((x) => next.includes(x));
       view.mac = !ordered.length || ordered.length === SW().length ? 'all' : ordered.join(',');
@@ -1124,9 +1124,9 @@ function openDevPick() {
   });
   document.body.append(el);
   requestAnimationFrame(() => el.classList.add('open'));
-  setTimeout(() => el.classList.add('open'), 60); // falls gerade kein Bild gezeichnet wird
+  setTimeout(() => el.classList.add('open'), 60); // in case no frame is currently being drawn
 }
-// ---------- − / + gedrückt halten: wiederholt, immer schneller; gespeichert wird beim Loslassen ----------
+// ---------- Hold − / +: repeats, faster and faster; saved on release ----------
 let stpHold = null, stpRepeated = false;
 app.addEventListener('pointerdown', (e) => {
   const b = e.target.closest('[data-step]'); if (!b || b.disabled) return;
@@ -1145,11 +1145,11 @@ const stpEnd = () => {
 };
 addEventListener('pointerup', stpEnd); addEventListener('pointercancel', stpEnd);
 app.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.classList?.contains('stpin')) e.target.blur(); });
-// Kopfzeile: oben ohne Kante, erst beim Scrollen als Glas abgesetzt
+// Header: no edge at the top, raised as glass only once scrolled
 const onScroll = () => document.documentElement.classList.toggle('scrolled', scrollY > 4);
 addEventListener('scroll', onScroll, { passive: true }); onScroll();
-// ---------- Klicks ----------
-// ---------- Startseite anordnen: lange drücken, dann Kacheln ziehen (wie auf dem iPhone) ----------
+// ---------- Clicks ----------
+// ---------- Arrange home page: long-press, then drag tiles (like on the iPhone) ----------
 let editHome = false, editOrder = null, hdrag = null, lp = null, lpFired = 0;
 function enterEdit() {
   swipe = null; haptic(15);
@@ -1167,19 +1167,19 @@ app.addEventListener('pointerdown', (e) => {
   lp = { x: e.clientX, y: e.clientY, t: setTimeout(() => { lp = null; lpFired = Date.now(); enterEdit(); }, 520) };
 }, true);
 app.addEventListener('pointermove', (e) => {
-  if (lp && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) > 8) { clearTimeout(lp.t); lp = null; } // bewegt = wischen oder scrollen
+  if (lp && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) > 8) { clearTimeout(lp.t); lp = null; } // moved = swiping or scrolling
   moveHomeDrag(e);
 }, true);
 const lpEnd = () => { if (lp) { clearTimeout(lp.t); lp = null; } endHomeDrag(); };
 app.addEventListener('pointerup', lpEnd, true);
 app.addEventListener('pointercancel', lpEnd, true);
 app.addEventListener('contextmenu', (e) => { if (e.target.closest('.grid.home')) e.preventDefault(); });
-// die gezogene Kachel folgt dem Finger; liegt sie über einer anderen, tauschen sie den Platz und die übrigen gleiten nach
+// the dragged tile follows the finger; when it's over another, they swap places and the rest slide along
 const followFinger = (t, e) => { t.style.transform = 'none'; const b = t.getBoundingClientRect(); t.style.transform = `translate(${e.clientX - hdrag.ox - b.left}px, ${e.clientY - hdrag.oy - b.top}px) scale(1.05)`; };
 function startHomeDrag(t, e) {
   const r = t.getBoundingClientRect();
   hdrag = { t, id: e.pointerId, ox: e.clientX - r.left, oy: e.clientY - r.top };
-  try { t.setPointerCapture(e.pointerId); } catch { /* ohne Zeiger-Erfassung weiter */ }
+  try { t.setPointerCapture(e.pointerId); } catch { /* continue without pointer capture */ }
   t.classList.add('lift'); haptic(8); e.preventDefault();
 }
 function moveHomeDrag(e) {
@@ -1207,14 +1207,14 @@ function endHomeDrag() {
   editOrder = [...t.parentElement.querySelectorAll(':scope > [data-okey]')].map((k) => k.dataset.okey);
 }
 app.addEventListener('click', async (e) => {
-  if (Date.now() - lpFired < 700) return; // das Loslassen nach dem langen Drücken öffnet nichts
-  if (editHome) { if (e.target.closest('[data-editdone]')) exitEdit(); return; } // im Bearbeiten-Modus wird nichts geschaltet oder geöffnet
+  if (Date.now() - lpFired < 700) return; // the release after the long-press opens nothing
+  if (editHome) { if (e.target.closest('[data-editdone]')) exitEdit(); return; } // in edit mode nothing is toggled or opened
   const at = (s) => e.target.closest(s), [r0, r1] = route();
   let el;
   if ((el = at('[data-swipe]'))) {
     if (Date.now() - swiped < 450) return;
     const d = dev(el.dataset.swipe);
-    // Startseite: Tippen öffnet das Gerät. Geräteseite: die grosse Schalter-Kachel schaltet beim Tippen.
+    // Home page: tapping opens the device. Device page: the large switch tile toggles on tap.
     go(`dev/${d.mac}`);
   } else if ((el = at('[data-devtoggle]'))) {
     const d = dev(el.dataset.devtoggle);
@@ -1254,7 +1254,7 @@ app.addEventListener('click', async (e) => {
     inp.setAttribute('aria-label', el.getAttribute('aria-label').split(':')[0]);
     inp.enterKeyHint = 'done'; el.replaceWith(inp); inp.focus(); inp.select();
     inp.addEventListener('blur', () => setTimeout(() => render(), 0));
-  } else if (stpRepeated) stpRepeated = false; // Klick nach gedrückt Halten: Wert ist schon gespeichert
+  } else if (stpRepeated) stpRepeated = false; // Click after press-and-hold: value is already saved
   else if ((el = at('[data-step]'))) {
     haptic(); const p = el.dataset.step, dir = Number(el.dataset.dir);
     stpSave(p, nextStep(el.dataset.list, Number(el.parentElement.querySelector('.stpv').dataset.v), dir));
@@ -1277,7 +1277,7 @@ app.addEventListener('click', async (e) => {
     haptic(); const [id, n] = el.dataset.schday.split('|'), k = Number(n);
     updSch(r1, (e) => (e.id === id ? { ...e, days: e.days.includes(k) ? e.days.filter((x) => x !== k) : [...e.days, k] } : e));
   } else if (at('[data-schadd]')) {
-    // neuer Zeitplan bekommt alle noch freien Tage
+    // a new schedule gets all remaining free days
     haptic(); const sc = dev(r1).cfg.schedule, used = sc.entries.flatMap((e) => e.days), last = sc.entries[sc.entries.length - 1];
     saveCfg(r1, { schedule: { entries: [...sc.entries, { id: `s${Date.now().toString(36)}`, start: last?.start || '07:00', end: last?.end || '23:00', days: WD.map(([n]) => n).filter((n) => !used.includes(n)) }] } });
   } else if ((el = at('[data-schdel]'))) { haptic(); updSch(r1, (e) => (e.id === el.dataset.schdel ? null : e)); }
@@ -1312,7 +1312,7 @@ app.addEventListener('click', async (e) => {
   }
   else if (at('[data-pushtest]')) { try { await api('api/push/test', { method: 'POST' }); toast('Test gesendet'); } catch (x) { toast(x.message, true); } }
 });
-// Eingaben: speichern, sobald ein Feld fertig ist
+// Inputs: save as soon as a field is done
 app.addEventListener('change', async (e) => {
   const t = e.target, [, r1] = route();
   if (t.dataset.in) {
@@ -1346,7 +1346,7 @@ app.addEventListener('change', async (e) => {
 });
 app.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.matches('input')) e.target.blur();
-  // Tastatur: Leertaste schaltet die Steckdose, Enter öffnet sie (wie Tippen)
+  // Keyboard: Space toggles the plug, Enter opens it (like tapping)
   const sw = e.target.closest?.('[data-swipe]');
   if (sw && e.key === ' ' && !sw.dataset.inpage) { e.preventDefault(); tapFlip(sw, dev(sw.dataset.swipe)); }
 });

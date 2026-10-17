@@ -1,7 +1,7 @@
-// myStrom-App – Backend
-// Findet die myStrom WiFi Switches im Heimnetz, misst alle 30 s, speichert den Verlauf in SQLite, führt die Regeln aus
-// (Zeitplan, nachts aus wenn inaktiv, Ferien, Sonne, Temperatur, Stromsparen, Timer) und meldet Alarme als Web Push.
-// Alles lokal, ohne myStrom-Konto und ohne Cloud. Keine npm-Abhängigkeiten (Node >= 22.13).
+// myStrom app – backend
+// Finds the myStrom WiFi Switches on the home network, measures every 30 s, stores the history in SQLite, runs the rules
+// (schedule, off at night when idle, vacation, sun, temperature, power saving, timer) and sends alarms as Web Push.
+// Fully local, no myStrom account and no cloud. No npm dependencies (Node >= 22.13).
 
 import http from 'node:http';
 import dgram from 'node:dgram';
@@ -22,22 +22,22 @@ const CFG = {
   dbPath: env.DB_PATH || path.join(__dirname, 'data', 'mystrom.db'),
   tz: env.TZ || 'Europe/Zurich',
   demo: env.DEMO === '1',
-  hosts: (env.DEVICES || '').split(',').map((s) => s.trim()).filter(Boolean), // feste IPs zusätzlich zur automatischen Suche
+  hosts: (env.DEVICES || '').split(',').map((s) => s.trim()).filter(Boolean), // fixed IPs in addition to automatic discovery
   pushContact: env.PUSH_CONTACT || 'mailto:mystrom-app@example.com',
-  // Adresse, unter der Taster diesen Server im WLAN erreichen (sonst die erste IPv4-Adresse des Rechners)
+  // Address at which buttons reach this server over WiFi (otherwise the machine's first IPv4 address)
   lanUrl: env.LAN_URL || '',
 };
 
 const DEFAULT_SETTINGS = { price: Number(env.TARIFF || 0.30), lat: Number(env.LAT || 47.37), lon: Number(env.LON || 8.54), place: '' };
 const TYPES = { 101: 'WiFi Switch CH v1', 106: 'WiFi Switch CH v2', 107: 'WiFi Switch EU', 120: 'WiFi Switch Zero', 125: 'WiFi Switch CH v2',
   102: 'WiFi Bulb', 105: 'WiFi LED Strip', 103: 'WiFi Button Plus', 104: 'WiFi Button', 118: 'WiFi Button Plus (2. Gen.)', 110: 'WiFi Motion Sensor' };
-// Geräteart: switch (Steckdose), bulb (Lampe, LED-Streifen), button (Taster), motion (Bewegungsmelder)
+// Device kind: switch (socket), bulb (bulb, LED strip), button (button), motion (motion sensor)
 const KINDS = { 101: 'switch', 106: 'switch', 107: 'switch', 120: 'switch', 125: 'switch', 102: 'bulb', 105: 'bulb', 103: 'button', 104: 'button', 118: 'button', 110: 'motion' };
 const kindOf = (d) => KINDS[d.type] || 'switch';
 const switchable = (d) => ['switch', 'bulb'].includes(kindOf(d));
 const BTN_ACTS = ['single', 'double', 'long', 'touch'];
 
-// ---------- Datenbank ----------
+// ---------- Database ----------
 mkdirSync(path.dirname(CFG.dbPath), { recursive: true });
 const db = new DatabaseSync(CFG.dbPath);
 db.exec(`
@@ -75,20 +75,20 @@ const q = {
 const meta = (k, fallback) => { const r = q.getMeta.get(k); return r ? JSON.parse(r.value) : fallback; };
 const setMeta = (k, v) => q.setMeta.run(k, JSON.stringify(v));
 let settings = { ...DEFAULT_SETTINGS, ...meta('settings', {}) };
-delete settings.priceFromSolar; // stammte aus dem früheren Abgleich mit dem Solar-Dashboard
+delete settings.priceFromSolar; // left over from the former sync with the solar dashboard
 
-// ---------- Zeit in der Zeitzone des Hauses ----------
+// ---------- Time in the home's time zone ----------
 const fmtDay = new Intl.DateTimeFormat('sv-SE', { timeZone: CFG.tz, year: 'numeric', month: '2-digit', day: '2-digit' });
 const fmtHM = new Intl.DateTimeFormat('en-GB', { timeZone: CFG.tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const fmtWd = new Intl.DateTimeFormat('en-US', { timeZone: CFG.tz, weekday: 'short' });
 const dayKey = (ts) => fmtDay.format(ts);
 const clock = (ts) => fmtHM.format(ts);
 const minOfDay = (ts) => { const [h, m] = clock(ts).split(':').map(Number); return h * 60 + m; };
-const weekday = (ts) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(fmtWd.format(ts)); // 0 = Sonntag
+const weekday = (ts) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(fmtWd.format(ts)); // 0 = Sunday
 const hm2min = (s) => { const [h, m] = String(s).split(':').map(Number); return h * 60 + m; };
 const min2hm = (m) => { m = ((Math.round(m) % 1440) + 1440) % 1440; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
 const addDays = (day, n) => { const d = new Date(`${day}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
-// Beginn eines Kalendertags in der Zeitzone (über die Abweichung zur UTC-Mittagszeit, sommerzeitfest genug für Tagesgrenzen)
+// Start of a calendar day in the time zone (via the offset at UTC noon, DST-safe enough for day boundaries)
 function dayStart(day) {
   const noon = Date.parse(`${day}T12:00:00Z`), off = minOfDay(noon) - 720;
   return Date.parse(`${day}T00:00:00Z`) - off * 60e3;
@@ -97,7 +97,7 @@ const dShort = (day) => { const [, m, d] = day.split('-').map(Number); return `$
 const pw = (w) => (w < 1000 ? `${Math.round(w)} W` : `${(w / 1000).toFixed(2)} kW`);
 const hash01 = (s) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return (h >>> 0) / 4294967296; };
 
-// Sonnenauf- und -untergang (NOAA-Näherung, auf ein bis zwei Minuten genau), in Minuten nach Mitternacht Ortszeit
+// Sunrise and sunset (NOAA approximation, accurate to a minute or two), in minutes after local midnight
 function sunTimes(day, lat = settings.lat, lon = settings.lon) {
   const d = new Date(`${day}T12:00:00Z`), n = Math.round((d - Date.UTC(d.getUTCFullYear(), 0, 0)) / 864e5), g = 2 * Math.PI / 365 * (n - 1);
   const eqt = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
@@ -108,15 +108,15 @@ function sunTimes(day, lat = settings.lat, lon = settings.lon) {
   return { rise: Math.round(720 - 4 * (lon + ha) - eqt + off), set: Math.round(720 - 4 * (lon - ha) - eqt + off) };
 }
 
-// ---------- Einstellungen pro Steckdose ----------
-// Jede Funktion der myStrom-App (auch PLUS, PRO, DATA PRO, HOME GUARD) als Block; alles ist hier frei.
+// ---------- Per-socket settings ----------
+// Every feature of the myStrom app (including PLUS, PRO, DATA PRO, HOME GUARD) as a block; everything is free here.
 const DEFAULT_CFG = () => {
   const today = dayKey(Date.now());
   return {
     name: '', room: '', icon: '', tcorr: 0, lock: false,
-    actions: [], // Power Actions: wenn über/unter X W, dann …
-    // mehrere Zeitpläne mit eigenen Zeiten; jeder Wochentag (0 = So … 6 = Sa) gehört höchstens zu einem
-    // idle: erst aus, wenn nicht mehr benutzt (unter below W für mins Minuten), statt genau um „Aus um“
+    actions: [], // Power Actions: if above/below X W, then …
+    // several schedules with their own times; each weekday (0 = Sun … 6 = Sat) belongs to at most one
+    // idle: only off once no longer in use (under `below` W for `mins` minutes), instead of exactly at "off at"
     schedule: { on: false, entries: [{ id: 's1', start: '07:00', end: '23:00', days: [1, 2, 3, 4, 5, 6, 0], idle: false, below: 25, mins: 10 }] },
     temp: { on: false, max: 45 },
     sun: { on: false, off: false, onOffset: 0, offOffset: 0 },
@@ -124,15 +124,15 @@ const DEFAULT_CFG = () => {
     alarms: { offline: true, unusual: true, switchedOn: false, hot: true },
     saver: { on: false, below: 5, mins: 30, back: 'time', at: '07:00', hours: 2 },
     timer: { on: false, mins: 120 },
-    // Lampe: zuletzt gewählte Farbe als HSV (Farbton 0–360, Sättigung 0–100, Helligkeit 1–100)
+    // Bulb: last chosen color as HSV (hue 0–360, saturation 0–100, brightness 1–100)
     light: { h: 30, s: 20, v: 80 },
-    // Taster: je Druck nichts, ein Gerät umschalten/ein/aus oder eine Szene
+    // Button: per press either nothing, toggle/on/off a device, or a scene
     button: Object.fromEntries(BTN_ACTS.map((k) => [k, { do: 'none', mac: '', scene: '' }])),
-    // Bewegungsmelder: bei Bewegung Geräte einschalten (wahlweise nur bei Dunkelheit), nach x min ohne Bewegung wieder aus
+    // Motion sensor: switch devices on when motion is detected (optionally only when dark), off again after x min without motion
     motion: { on: false, targets: [], dark: true, lux: 30, mins: 5 },
   };
 };
-// Eingaben nach dem Muster der Standardwerte prüfen: Zeit, Datum, Zahl, Ja/Nein, Text, Wochentage
+// Validate input against the shape of the defaults: time, date, number, yes/no, text, weekdays
 const LIMITS = { h: [0, 360], s: [0, 100], v: [1, 100], lux: [0, 2000], price: [0, 5], lat: [-90, 90], lon: [-180, 180], tcorr: [-10, 10], below: [0, 3000], mins: [1, 1440], max: [20, 90], onOffset: [-180, 180], offOffset: [-180, 180], hours: [1, 48] };
 function clean(def, val, key = '') {
   if (val === undefined || val === null) return def;
@@ -150,7 +150,7 @@ function clean(def, val, key = '') {
   if (key === 'do') return ['none', 'toggle', 'on', 'off', 'scene'].includes(s) ? s : def;
   return s.slice(0, 40);
 }
-// Zeitpläne prüfen; alte Form (ein start/end/days) wird zum ersten Eintrag. Ein Tag, der schon vergeben ist, fällt beim späteren weg.
+// Validate schedules; the old form (a single start/end/days) becomes the first entry. A day already taken is dropped from later entries.
 function cleanSchedule(v) {
   const hm = (x, d) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(x)) ? String(x) : d), used = new Set();
   const raw = Array.isArray(v.entries) ? v.entries : v.start ? [{ id: 's1', start: v.start, end: v.end, days: v.days }] : [{ id: 's1' }];
@@ -163,7 +163,7 @@ function cleanSchedule(v) {
   });
   return { on: Boolean(v.on), entries };
 }
-// Power Actions prüfen: Bedingung (über/unter Watt, Mindestdauer) und was dann passiert
+// Validate Power Actions: condition (above/below watts, minimum duration) and what happens then
 const ACT_THEN = ['notify', 'off', 'other-on', 'other-off'];
 function cleanActions(list) {
   if (!Array.isArray(list)) return [];
@@ -182,9 +182,9 @@ function cleanActions(list) {
 const isObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 const merge = (a, b) => (isObj(a) && isObj(b) ? Object.fromEntries([...new Set([...Object.keys(a), ...Object.keys(b)])].map((k) => [k, merge(a[k], b[k])])) : b === undefined ? a : b);
 
-// ---------- Geräte ----------
+// ---------- Devices ----------
 const devices = new Map(); // mac -> { mac, ip, type, fw, cfg, added }
-// frühere Funktion „Nachts aus“ (eigenes Zeitfenster) wird zum Zeitplan mit „erst aus, wenn nicht mehr benutzt“
+// the former "off at night" feature (own time window) becomes a schedule with "only off once no longer in use"
 function migrateIdle(c) {
   const i = c.idle; delete c.idle;
   if (!i?.on) return c;
@@ -196,15 +196,15 @@ function migrateIdle(c) {
 for (const r of q.devices.all()) devices.set(r.mac, { ...r, cfg: clean(DEFAULT_CFG(), migrateIdle(JSON.parse(r.cfg || '{}'))) });
 const saveDevice = (d) => q.putDevice.run(d.mac, d.ip, d.type, d.fw, JSON.stringify(d.cfg), d.added);
 const nameOf = (d) => d.cfg.name || `${{ bulb: 'Lampe', button: 'Taster', motion: 'Bewegungsmelder' }[kindOf(d)] || 'Steckdose'} ${d.mac.slice(-4)}`;
-// Laufzustand (nicht gespeichert): Messwerte, Verbindungsfehler, Zähler der Regeln
+// Runtime state (not persisted): readings, connection errors, rule counters
 const rt = new Map();
 const R = (mac) => { if (!rt.has(mac)) rt.set(mac, { online: false, fails: 0, w: 0, relay: false, temp: null, seen: 0 }); return rt.get(mac); };
 
-// Demo: drei simulierte Steckdosen, damit sich die App ohne echte Geräte ausprobieren lässt
+// Demo: three simulated sockets so the app can be tried out without real devices
 const demo = { DEMO00000001: { relay: true, e: 0 }, DEMO00000002: { relay: true, e: 0 }, DEMO00000003: { relay: false, e: 0 },
   DEMO00000004: { on: false, color: '30;20;80' }, DEMO00000005: { voltage: 3.9, charge: false }, DEMO00000006: { motionUntil: 0 } };
 const DEMO_EXTRA = [['DEMO00000004', 102, 'Stehlampe', 'Wohnzimmer'], ['DEMO00000005', 104, 'Taster Eingang', 'Eingang'], ['DEMO00000006', 110, 'Bewegung Flur', 'Flur']];
-// Demo-Bewegungsmelder: alle paar Minuten jemand im Flur; Helligkeit folgt grob dem Tag
+// Demo motion sensor: someone in the hallway every few minutes; brightness roughly follows the day
 function demoSensors() {
   const s = demo.DEMO00000006, now = Date.now(), m = minOfDay(now);
   if (now > s.motionUntil + 4 * 60e3 && Math.random() < 0.15) s.motionUntil = now + 45e3;
@@ -241,11 +241,11 @@ async function devFetch(d, p, timeout = 4000, body) {
   const t = await r.text();
   return t ? JSON.parse(t) : {};
 }
-// Gerät per IP aufnehmen oder aktualisieren (Name und Regeln bleiben)
+// Add or update a device by IP (name and rules are kept)
 async function addByIp(ip, hint) {
   let info;
   try { info = await fetch(`http://${ip}/api/v1/info`, { signal: AbortSignal.timeout(4000) }).then((r) => r.json()); }
-  catch (e) { if (!hint) throw e; info = { mac: hint.mac, type: hint.type }; } // schlafender Taster: Angaben aus der UDP-Meldung
+  catch (e) { if (!hint) throw e; info = { mac: hint.mac, type: hint.type }; } // sleeping button: details from the UDP announcement
   const mac = String(info.mac || '').toUpperCase().replace(/[^0-9A-F]/g, '');
   if (mac.length !== 12) throw new Error('Unter dieser Adresse antwortet kein myStrom-Gerät.');
   const old = devices.get(mac);
@@ -255,8 +255,8 @@ async function addByIp(ip, hint) {
   devices.set(mac, d); saveDevice(d);
   return d;
 }
-// Automatische Suche: jedes myStrom-Gerät meldet sich alle paar Sekunden per UDP-Broadcast auf Port 7979
-// (6 Bytes MAC, 1 Byte Gerätetyp). Bekannte Geräte bekommen so auch eine neue IP mit.
+// Automatic discovery: every myStrom device announces itself every few seconds via UDP broadcast on port 7979
+// (6 bytes MAC, 1 byte device type). This way known devices also pick up a new IP.
 function discover() {
   if (CFG.demo) return;
   const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
@@ -264,7 +264,7 @@ function discover() {
   sock.on('message', async (msg, from) => {
     if (msg.length < 7) return;
     const mac = msg.subarray(0, 6).toString('hex').toUpperCase(), type = msg[6];
-    if (!KINDS[type]) return; // Steckdosen, Lampen, Taster, Bewegungsmelder (Gateways u. a. nicht)
+    if (!KINDS[type]) return; // sockets, bulbs, buttons, motion sensors (not gateways etc.)
     const d = devices.get(mac);
     if (d && kindOf(d) === 'button') { const r = R(mac); r.seen = Date.now(); r.online = true; if (d.ip === from.address) { buttonAwake(d); return; } }
     if ((d && d.ip === from.address) || busy.has(mac)) return;
@@ -275,9 +275,9 @@ function discover() {
   sock.bind(7979);
 }
 
-// ---------- Ereignisse und Schalten ----------
+// ---------- Events and switching ----------
 function logEvent(mac, kind, text) { q.addEvent.run(Date.now(), mac, kind, text); }
-// Schalten mit Grund; der Grund erscheint im Verlauf und im Status ("Aus seit 23:31 · nicht mehr benutzt")
+// Switch with a reason; the reason shows up in the history and the status ("Aus seit 23:31 · nicht mehr benutzt")
 async function setRelay(mac, on, why) {
   const d = devices.get(mac), r = R(mac);
   if (!d) throw new Error('Unbekanntes Gerät.');
@@ -288,7 +288,7 @@ async function setRelay(mac, on, why) {
   if (r.relay !== on) edge(d, on, why);
   r.relay = on; if (!on) r.w = 0;
 }
-// Lampe: Farbe und Helligkeit (HSV), schaltet dabei ein
+// Bulb: color and brightness (HSV), also switches it on
 async function setLight(mac, { h, s: sat, v }) {
   const d = devices.get(mac), r = R(mac);
   d.cfg.light = clean(DEFAULT_CFG().light, { h, s: sat, v }); saveDevice(d);
@@ -297,15 +297,15 @@ async function setLight(mac, { h, s: sat, v }) {
   r.color = `${c.h};${c.s};${c.v}`; r.expect = { relay: true, until: Date.now() + CFG.pollMs * 2 };
   if (!r.relay) edge(d, true, 'von Hand in der App'); r.relay = true;
 }
-// Taster: eigene Adresse im WLAN, damit der Taster uns aufrufen kann
+// Button: our own address on the WiFi so the button can call us
 function lanBase() {
   if (CFG.lanUrl) return CFG.lanUrl.replace(/\/$/, '').replace(/^https?:\/\//, '');
   const ip = Object.values(os.networkInterfaces()).flat().find((x) => x && x.family === 'IPv4' && !x.internal)?.address || '127.0.0.1';
   return `${ip}:${CFG.port}`;
 }
-// Was der Taster bei jedem Druck aufruft: leer = nichts, sonst unsere Adresse; get:// heisst GET (siehe REST-API des Tasters)
+// What the button calls on each press: empty = nothing, otherwise our address; get:// means GET (see the button's REST API)
 const buttonUrls = (d) => Object.fromEntries(BTN_ACTS.map((k) => [k, d.cfg.button[k].do === 'none' ? '' : `get://${lanBase()}/api/button/${d.mac}/${k}`]));
-// Taster ist wach (meldet sich nach einem Druck oder am USB-Kabel): Akku lesen und, falls nötig, die Aktionen übertragen
+// Button is awake (reports after a press or while on USB): read the battery and, if needed, push the actions
 async function buttonAwake(d) {
   const r = R(d.mac); if (r.syncing) return; r.syncing = true;
   try {
@@ -316,12 +316,12 @@ async function buttonAwake(d) {
     r.synced = JSON.stringify(want);
   } catch (e) { r.synced = null; } finally { r.syncing = false; }
 }
-// Druck auf einem Taster ausführen
+// Handle a press on a button
 async function buttonPress(d, k) {
   const a = d.cfg.button[k], r = R(d.mac);
   r.seen = Date.now(); r.online = true; r.lastPress = { k, ts: Date.now() };
   const label = { single: 'einmal gedrückt', double: 'zweimal gedrückt', long: 'lang gedrückt', touch: 'berührt' }[k];
-  setTimeout(() => buttonAwake(d), 300); // wach: gleich Akku lesen und Aktionen abgleichen
+  setTimeout(() => buttonAwake(d), 300); // awake: read the battery and sync actions right away
   if (a.do === 'scene') { await runScene(a.scene); logEvent(d.mac, 'info', `${label}: Szene`); return; }
   const t = devices.get(a.mac);
   if (!t || !switchable(t) || t.cfg.lock) return;
@@ -329,7 +329,7 @@ async function buttonPress(d, k) {
   if (R(t.mac).relay !== on) await setRelay(t.mac, on, `über ${nameOf(d)}`);
   logEvent(d.mac, 'info', `${label}: ${nameOf(t)} ${on ? 'an' : 'aus'}`);
 }
-// Ein- oder Ausschalten erkannt (von uns, am Gerät oder von einer anderen App)
+// Switch-on or switch-off detected (by us, on the device, or by another app)
 function edge(d, on, why) {
   const r = R(d.mac), now = Date.now();
   logEvent(d.mac, on ? 'on' : 'off', why);
@@ -338,13 +338,13 @@ function edge(d, on, why) {
   else r.onSince = null;
 }
 
-// ---------- Messen ----------
-// Lampe meldet an/aus, Farbe und Leistung; als Bericht wie bei der Steckdose, damit Verbrauch und Regeln gleich funktionieren
+// ---------- Measuring ----------
+// Bulb reports on/off, color and power; shaped like a socket report so consumption and rules work the same
 function bulbReport(d, x) { R(d.mac).color = x.color ?? null; return { relay: Boolean(x.on), power: Number(x.power) || 0 }; }
 let lastTick = Date.now();
 async function pollDevice(d) {
   const r = R(d.mac), now = Date.now(), kind = kindOf(d);
-  if (kind === 'button') { if (r.seen && now - r.seen > 36 * 3600e3) r.online = false; return; } // Taster schlafen, melden sich selbst
+  if (kind === 'button') { if (r.seen && now - r.seen > 36 * 3600e3) r.online = false; return; } // buttons sleep and report on their own
   try {
     if (kind === 'motion') {
       const x = await devFetch(d, '/api/v1/sensors');
@@ -356,7 +356,7 @@ async function pollDevice(d) {
     }
     const rep = kind === 'bulb' ? bulbReport(d, (await devFetch(d, `/api/v1/device/${d.mac}`))[d.mac] || {}) : await devFetch(d, '/report');
     const relay = Boolean(rep.relay), w = Math.max(0, Number(rep.power) || 0);
-    // Energie aus dem Zähler des Geräts (Wattsekunden seit dem Start), sonst Leistung mal Zeit
+    // Energy from the device's counter (watt-seconds since boot), otherwise power times time
     let wh = 0;
     const dt = r.lastTs ? (now - r.lastTs) / 1000 : CFG.pollMs / 1000;
     if (rep.boot_id && rep.boot_id === r.bootId && rep.energy_since_boot >= r.energy && dt < 600) wh = (rep.energy_since_boot - r.energy) / 3600;
@@ -380,21 +380,21 @@ async function pollAll() {
   await Promise.all([...devices.values()].map(pollDevice));
   const prev = lastTick; lastTick = Date.now();
   for (const d of devices.values()) await runRules(d, prev, lastTick).catch((e) => console.error('Regeln', nameOf(d), e.message));
-  // Szenen zu festen Zeiten
+  // Scenes at fixed times
   const crossed = crossedFn(prev, lastTick);
   for (const sc of meta('scenes', DEFAULT_SCENES)) {
     if (sc.time?.on && sc.time.days.includes(weekday(lastTick)) && crossed(hm2min(sc.time.at))) await runScene(sc.id).catch((e) => console.error('Szene', sc.name, e.message));
   }
 }
 
-// ---------- Regeln ----------
-// Uhrzeit-Regeln schalten genau einmal, wenn die Uhr die eingestellte Minute überschreitet (wie bei myStrom);
-// dazwischen kannst du jederzeit von Hand schalten. Bedingungen (Leistung, Temperatur) prüft jeder Messdurchgang.
+// ---------- Rules ----------
+// Time-of-day rules switch exactly once when the clock passes the set minute (as with myStrom);
+// in between you can switch by hand at any time. Conditions (power, temperature) are checked on every poll.
 function crossedFn(prev, now) {
   const a = minOfDay(prev), b = minOfDay(now), sameDay = dayKey(prev) === dayKey(now);
   return (m) => { m = ((m % 1440) + 1440) % 1440; if (a === b && sameDay) return false; return a < b ? m > a && m <= b : m > a || m <= b; };
 }
-// Ferien: jeden Tag ein anderer, aber fester Zeitpunkt im Fenster (Zufall aus Gerät + Datum), morgens kurz, abends länger
+// Vacation: a different but fixed time in the window each day (random from device + date), short in the morning, longer in the evening
 function vacationSlots(d, day) {
   const v = d.cfg.vacation;
   if (!v.on || day < v.from || day > v.to) return [];
@@ -410,12 +410,12 @@ function usualMax(mac) {
   if (Date.now() - p99Cache.at > 3600e3) p99Cache = { at: Date.now(), v: {} };
   if (!(mac in p99Cache.v)) {
     const ws = q.onPowers.all(mac, Date.now() - 14 * 864e5).map((x) => x.w).sort((a, b) => a - b);
-    p99Cache.v[mac] = ws.length > 2000 ? ws[Math.floor(ws.length * 0.99)] : null; // erst nach einigen Tagen Messung
+    p99Cache.v[mac] = ws.length > 2000 ? ws[Math.floor(ws.length * 0.99)] : null; // only after a few days of measurements
   }
   return p99Cache.v[mac];
 }
-// Licht bei Bewegung: einschalten (wenn gewünscht nur bei Dunkelheit), nach x min ohne Bewegung wieder aus – aber nur,
-// was der Melder selbst eingeschaltet hat (von Hand Eingeschaltetes bleibt an)
+// Light on motion: switch on (only when dark, if desired), off again after x min without motion – but only
+// what the sensor itself switched on (anything switched on by hand stays on)
 async function motionRule(d, now) {
   const c = d.cfg.motion, r = R(d.mac); r.mOn ||= new Set();
   if (!c.on) { r.mOn.clear(); return; }
@@ -427,8 +427,8 @@ async function motionRule(d, now) {
     r.mOn.clear();
   }
 }
-// Zeitplan mit „erst aus, wenn nicht mehr benutzt“: gilt von „Aus um“ bis zum nächsten „Ein um“, höchstens 12 Stunden.
-// Ohne gespeicherten Zustand berechnet, damit ein Neustart des Servers nichts verliert.
+// Schedule with "only off once no longer in use": applies from "off at" until the next "on at", at most 12 hours.
+// Computed without stored state so a server restart loses nothing.
 function idleWatch(c, now) {
   if (!c.schedule.on || !c.schedule.entries.some((e) => e.idle)) return null;
   const today = dayKey(now), at = (day, hm) => dayStart(day) + hm2min(hm) * 60e3;
@@ -449,36 +449,36 @@ async function runRules(d, prev, now) {
   if (kindOf(d) === 'motion') return motionRule(d, now);
   if (kindOf(d) === 'button') return;
   const sw = async (on, why) => { if (r.relay !== on) await setRelay(d.mac, on, why); };
-  // Zeitplan
+  // Schedule
   const t = c.schedule.on && c.schedule.entries.find((e) => e.days.includes(weekday(now)));
   if (t) {
     if (crossed(hm2min(t.start))) await sw(true, 'Zeitplan');
     if (!t.idle && crossed(hm2min(t.end))) await sw(false, 'Zeitplan');
   }
-  // „erst aus, wenn nicht mehr benutzt“: ab „Aus um“ abschalten, sobald die Leistung lange genug unter der Schwelle bleibt
+  // "only off once no longer in use": from "off at", switch off once power stays below the threshold long enough
   const w = idleWatch(c, now);
   if (w && r.relay && r.w < w.below) {
     r.lowSince ||= now;
     if (now - r.lowSince >= w.mins * 60e3) await sw(false, 'nicht mehr benutzt');
   } else r.lowSince = null;
-  // Temperatur
+  // Temperature
   const temp = r.temp == null ? null : r.temp + c.tcorr;
   if (c.temp.on && r.relay && temp != null && temp > c.temp.max) { await sw(false, `zu warm (${temp.toFixed(1)} °C)`); }
   if (c.alarms.hot && temp != null && temp > (c.temp.on ? c.temp.max : 45) && now - (r.hotSent || 0) > 6 * 3600e3) {
     r.hotSent = now; notify(d, 'hot', `${nameOf(d)} ist ${temp.toFixed(1)} °C warm`, 'Die Steckdose misst eine ungewöhnlich hohe Temperatur.');
   }
-  // Sonnenauf- und -untergang
+  // Sunrise and sunset
   const sun = sunTimes(day);
   if (sun && c.sun.on && crossed(sun.set + c.sun.onOffset)) await sw(true, 'Sonnenuntergang');
   if (sun && c.sun.off && crossed(sun.rise + c.sun.offOffset)) await sw(false, 'Sonnenaufgang');
-  // Ferien (Home Guard): auch das Fenster von gestern Abend beachten, falls es über Mitternacht reicht
+  // Vacation (Home Guard): also consider last evening's window in case it runs past midnight
   for (const [dd, shift] of [[day, 0], [addDays(day, -1), -1440]]) {
     for (const s of vacationSlots(d, dd)) {
       if (crossed(s.start + shift)) await sw(true, `Ferien ${s.key}`);
       if (crossed(s.end + shift)) await sw(false, `Ferien ${s.key}`);
     }
   }
-  // Stromsparen: hängt das Gerät nur im Standby, abschalten; wieder an je nach Einstellung
+  // Power saving: if the device is only sitting in standby, switch off; back on depending on the setting
   if (c.saver.on) {
     if (r.relay && r.w < c.saver.below) {
       r.saverSince ||= now;
@@ -489,10 +489,10 @@ async function runRules(d, prev, now) {
       if (c.saver.back === 'after' && now - r.saverOff >= c.saver.hours * 3600e3) await sw(true, 'nach Stromsparen wieder an');
     }
   }
-  // Timer: nach dem Einschalten eine bestimmte Zeit an
+  // Timer: stays on for a set time after switching on
   if (c.timer.on && r.relay && r.onSince && now - r.onSince >= c.timer.mins * 60e3) await sw(false, `Timer ${c.timer.mins} min abgelaufen`);
-  // Power Actions: gilt die Bedingung lange genug, einmal auslösen; erst wieder, wenn sie zwischendurch nicht mehr galt.
-  // „Unter X W“ zählt erst, nachdem das Gerät darüber gelaufen ist; sonst meldete „Waschmaschine fertig“ auch ohne Waschgang.
+  // Power Actions: once the condition holds long enough, fire once; only again after it has stopped holding in between.
+  // "Below X W" only counts after the device has run above it; otherwise "washing machine done" would fire without a wash cycle.
   r.acts ||= {};
   for (const a of c.actions) {
     if (!a.on) continue;
@@ -505,7 +505,7 @@ async function runRules(d, prev, now) {
       if (now - st.since >= a.mins * 60e3) { st.fired = true; if (a.when === 'below') st.armed = false; await runAction(d, a).catch((e) => console.error('Power Action:', e.message)); }
     } else if (!cond) { st.since = null; st.fired = false; }
   }
-  // ungewöhnlicher Verbrauch: drei Messungen hintereinander deutlich über dem, was das Gerät sonst zieht
+  // unusual consumption: three readings in a row well above what the device normally draws
   const usual = usualMax(d.mac);
   if (c.alarms.unusual && usual != null && r.w > 20 && r.w > Math.max(usual * 1.5, usual + 30)) {
     r.highCount = (r.highCount || 0) + 1;
@@ -522,7 +522,7 @@ async function runAction(d, a) {
   if (R(t.mac).relay !== on) await setRelay(t.mac, on, `Power Action von ${nameOf(d)} (${cond})`);
 }
 
-// ---------- Status für die App ----------
+// ---------- Status for the app ----------
 const ago = (ts) => { const m = Math.round((Date.now() - ts) / 60e3); return m < 1 ? 'gerade eben' : m < 60 ? `vor ${m} min` : m < 1440 ? `um ${clock(ts)}` : `am ${dShort(dayKey(ts))}`; };
 function statusText(d) {
   const r = R(d.mac), c = d.cfg, now = Date.now(), m = minOfDay(now);
@@ -542,7 +542,7 @@ function statusText(d) {
   if (c.vacation.on && today < c.vacation.from) return `Aus · Ferien ab ${dShort(c.vacation.from)}`;
   return 'Aus';
 }
-// mac: 'all', ein Gerät oder mehrere mit Komma (A,B) – dann die Summe der gewählten
+// mac: 'all', one device or several comma-separated (A,B) – then the sum of the selected ones
 const macsOf = (mac) => (mac === 'all' ? null : mac.split(','));
 const validMac = (mac) => mac === 'all' || (!!mac && mac.split(',').every((m) => devices.has(m)));
 const sumOver = (mac, all, one) => (mac === 'all' ? all() : macsOf(mac).reduce((a, m) => a + one(m), 0));
@@ -568,11 +568,11 @@ function apiState() {
     devices: [...devices.values()].map(deviceJson), scenes: meta('scenes', DEFAULT_SCENES), pushSubs: meta('pushSubs', []).length,
   };
 }
-// Tagesverlauf in 5-Minuten-Schritten (Mittelwert W), dazu Summe und Spitze
+// Daily curve in 5-minute steps (average W), plus total and peak
 function apiCurve(mac, day) {
   const from = dayStart(day), to = dayStart(addDays(day, 1)), n = Math.round((to - from) / 300e3);
   const rows = rowsOf(mac, from, to);
-  const per = new Map(); // je Gerät und Fenster: Summe, Anzahl
+  const per = new Map(); // per device and window: sum, count
   let wh = 0;
   for (const s of rows) {
     const i = Math.floor((s.ts - from) / 300e3), k = `${s.mac}|${i}`, a = per.get(k) || [0, 0];
@@ -607,7 +607,7 @@ function apiBars(mac, period, ref) {
   const bars = buckets.map((b) => ({ key: b.key, label: b.label, wh: b.from > now ? null : sumOver(mac, () => q.sumBetweenAll.get(b.from, b.to).wh, (m) => q.sumBetween.get(m, b.from, b.to).wh) }));
   return { period, ref, bars, wh: bars.reduce((a, b) => a + (b.wh || 0), 0) };
 }
-// Temperatur (mit Korrektur der Steckdose): Tag in 5-Minuten-Mittelwerten, Woche/Monat als Tiefst-, Mittel- und Höchstwert je Tag
+// Temperature (with the socket's correction): day as 5-minute averages, week/month as min, mean and max per day
 function apiTemp(d, period, ref) {
   const k = d.cfg.tcorr, r1 = (x) => (x == null ? null : Math.round((x + k) * 10) / 10);
   if (period === 'day') {
@@ -626,7 +626,7 @@ function apiTemp(d, period, ref) {
   return { period, ref, days, min: has.length ? Math.min(...has.map((x) => x.min)) : null, max: has.length ? Math.max(...has.map((x) => x.max)) : null,
     avg: has.length ? Math.round(has.reduce((a, x) => a + x.avg, 0) / has.length * 10) / 10 : null };
 }
-// CSV: Rohdaten (alle 30 s) oder zusammengefasst je 5 Minuten, Stunde oder Tag (Mittelwert Leistung, Summe Energie)
+// CSV: raw data (every 30 s) or aggregated per 5 minutes, hour or day (average power, total energy)
 function csvExport(mac, from, to, res = 'raw') {
   const a = dayStart(from), b = dayStart(addDays(to, 1));
   const rows = rowsOf(mac, a, b);
@@ -651,7 +651,7 @@ function csvExport(mac, from, to, res = 'raw') {
   return lines.join('\n');
 }
 
-// ---------- Szenen ----------
+// ---------- Scenes ----------
 const DEFAULT_SCENES = [{ id: 'alles-aus', name: 'Alles aus', actions: {} }];
 function cleanScenes(list) {
   if (!Array.isArray(list)) return meta('scenes', DEFAULT_SCENES);
@@ -664,7 +664,7 @@ function cleanScenes(list) {
 async function runScene(id) {
   const s = meta('scenes', DEFAULT_SCENES).find((x) => x.id === id);
   if (!s) throw new Error('Unbekannte Szene.');
-  const acts = Object.keys(s.actions).length ? s.actions : Object.fromEntries([...devices.values()].filter(switchable).map((x) => [x.mac, 'off'])); // leer = alles aus
+  const acts = Object.keys(s.actions).length ? s.actions : Object.fromEntries([...devices.values()].filter(switchable).map((x) => [x.mac, 'off'])); // empty = all off
   const errors = [];
   for (const [mac, a] of Object.entries(acts)) {
     const d = devices.get(mac);
@@ -674,7 +674,7 @@ async function runScene(id) {
   return { ok: !errors.length, errors };
 }
 
-// ---------- Push-Mitteilungen (Web Push, ohne fremde Dienste; wie im Solar-Dashboard) ----------
+// ---------- Push notifications (Web Push, no third-party services; as in the solar dashboard) ----------
 const b64u = (buf) => Buffer.from(buf).toString('base64url');
 const fromB64u = (s) => Buffer.from(String(s), 'base64url');
 function vapidKeys() {
@@ -694,7 +694,7 @@ function vapidAuth(endpoint) {
   const sig = crypto.sign('sha256', Buffer.from(`${head}.${body}`), { key: crypto.createPrivateKey({ key: v.jwk, format: 'jwk' }), dsaEncoding: 'ieee-p1363' });
   return `vapid t=${head}.${body}.${b64u(sig)}, k=${v.pub}`;
 }
-// Inhalt für ein Gerät verschlüsseln (RFC 8291, aes128gcm)
+// Encrypt the payload for one device (RFC 8291, aes128gcm)
 function encryptPush(keys, payload) {
   const uaPub = fromB64u(keys.p256dh), authSecret = fromB64u(keys.auth);
   const ecdh = crypto.createECDH('prime256v1'); ecdh.generateKeys();
@@ -727,13 +727,13 @@ async function pushAll(msg) {
   if (error) console.error(new Date().toISOString(), 'Push:', error);
   return { sent, total: subs.length, error };
 }
-// Alarm: in den Verlauf und als Mitteilung; Antippen öffnet die Steckdose
+// Alarm: into the history and as a notification; tapping opens the socket
 function notify(d, kind, title, body) {
   logEvent(d.mac, 'alarm', body ? `${title}. ${body}` : title);
   if (!CFG.demo) pushAll({ title, body, url: `./#dev/${d.mac}`, tag: `${kind}-${d.mac}` }).catch(() => {});
 }
 
-// ---------- Standort: Ortsname in Koordinaten umwandeln (Open-Meteo, zuerst in der Schweiz) ----------
+// ---------- Location: convert a place name to coordinates (Open-Meteo, Switzerland first) ----------
 async function geocode(text) {
   const m = text.match(/^\s*(-?\d{1,2}(?:\.\d+)?)\s*[,; ]\s*(-?\d{1,3}(?:\.\d+)?)\s*$/);
   if (m) return { lat: Number(m[1]), lon: Number(m[2]), place: `${m[1]}, ${m[2]}` };
@@ -780,7 +780,7 @@ const server = http.createServer(async (req, res) => {
       if (!R(d.mac).online) return json({ error: `${nameOf(d)} ist nicht erreichbar.` }, 503);
       await setLight(d.mac, await readBody(req)); return json(deviceJson(d));
     }
-    // vom Taster aufgerufen (GET) oder in der App zum Ausprobieren (POST)
+    // called by the button (GET) or from the app for testing (POST)
     const bm = /^\/api\/button\/([0-9A-Z]{12})\/(single|double|long|touch)$/.exec(p);
     if (bm) {
       const d = devices.get(bm[1]); if (!d || kindOf(d) !== 'button') return json({ error: 'Kein Taster.' }, 404);
@@ -790,7 +790,7 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       dev.cfg = clean(DEFAULT_CFG(), merge(dev.cfg, b.cfg || {}));
       saveDevice(dev);
-      if (kindOf(dev) === 'button' && b.cfg?.button) { R(dev.mac).synced = null; buttonAwake(dev); } // klappt, wenn er gerade wach ist; sonst beim nächsten Drücken
+      if (kindOf(dev) === 'button' && b.cfg?.button) { R(dev.mac).synced = null; buttonAwake(dev); } // works if it is awake right now; otherwise on the next press
       return json(deviceJson(dev));
     }
     if (dm && req.method === 'DELETE') {
@@ -884,7 +884,7 @@ if (CFG.demo && !devices.size) {
     devices.set(mac, d); saveDevice(d);
   }
 }
-// Demo: dazu eine Lampe, ein Taster und ein Bewegungsmelder (auch in älteren Demo-Datenbanken)
+// Demo: plus a bulb, a button and a motion sensor (also in older demo databases)
 if (CFG.demo) for (const [mac, type, name, room] of DEMO_EXTRA) {
   if (!devices.has(mac)) {
     const cfg = { ...DEFAULT_CFG(), name, room };
@@ -901,7 +901,7 @@ await pollAll().catch((e) => console.error('Messen:', e.message));
 setInterval(() => pollAll().catch((e) => console.error('Messen:', e.message)), CFG.pollMs);
 setInterval(() => q.pruneEvents.run(Date.now() - 400 * 864e5), 24 * 3600e3);
 
-// Tägliches Backup ab 3 Uhr nach data/backup, die letzten 14 Tage bleiben
+// Daily backup from 3 am to data/backup, the last 14 days are kept
 const BACKUP_DIR = path.join(path.dirname(CFG.dbPath), 'backup');
 function backupDb() {
   try {

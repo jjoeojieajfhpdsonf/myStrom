@@ -1,67 +1,127 @@
-# Steckdosen (myStrom, lokal)
+# myStrom, local
 
-Eigene App für die myStrom WiFi Switches im Heimnetz, im Aussehen der myStrom-App. Alle Funktionen, die myStrom in PLUS, PRO, DATA PRO und HOME GUARD verkauft, sind hier frei. Es braucht weder ein Konto noch die Cloud, und die Daten bleiben auf deinem Server.
+A self-hosted app for **myStrom** smart-home devices on your home network. It does everything the official myStrom app sells as PLUS, PRO, DATA PRO and HOME GUARD, for free, without an account and without the cloud. All data stays on your own server.
 
-## Was sie kann
+It is a small Node.js server (no dependencies) plus a web app you add to your phone's home screen. The user interface is in German.
 
-- **Finden:** Die Steckdosen melden sich alle paar Sekunden im WLAN (UDP 7979). Die App nimmt sie von selbst auf und merkt sich eine neue IP. Wo eine Steckdose sich nicht meldet, trägst du die IP unter „Mehr“ ein.
-- **Schalten:** Eine Kachel nach links oder rechts wischen schaltet sie, wie in der myStrom-App. Antippen öffnet die Funktionen.
-- **Messen:** Alle 30 Sekunden Leistung, Energie (aus dem Zähler der Steckdose) und Temperatur. Der Verlauf wird unbegrenzt gespeichert und lässt sich als CSV exportieren.
-- **Regeln** (laufen auf dem Server, auch wenn das Handy aus ist):
+> **Not affiliated with myStrom AG.** "myStrom" is a trademark of myStrom AG. This project only uses the local REST interfaces the devices offer.
 
-| Regel | Was sie tut |
+## Supported devices
+
+| Device | What you get |
 |---|---|
-| Zeitplan | An und aus zu festen Zeiten, pro Wochentag |
-| Nachts aus, wenn nicht benutzt | Im Zeitfenster aus, sobald die Leistung eine Weile unter der Schwelle bleibt. Wer noch arbeitet, wird nicht abgeschaltet. Morgens geht die Steckdose wieder an. |
-| Ferien / Home Guard | Morgens und abends zu täglich wechselnden Zeiten an, pro Steckdose einstellbar |
-| Sonne | Bei Sonnenuntergang an und bei Sonnenaufgang aus, mit Verschiebung |
-| Timer | Nach dem Einschalten X Minuten an, dann aus |
-| Stromsparen | Bei Standby aus. Wieder an von Hand, um eine Uhrzeit oder nach X Stunden. |
-| Power Actions | Wenn über oder unter X Watt für Y Minuten: Mitteilung (z. B. „Waschmaschine fertig“), ausschalten oder eine andere Steckdose schalten |
-| Temperatur | Aus, wenn die Steckdose zu warm wird |
+| **WiFi Switch** (CH v1/v2, EU, Zero) | Switching, power and energy metering, temperature, all rules below |
+| **WiFi Bulb / LED Strip** | Switching like a socket (rules, scenes, consumption) plus colour and brightness |
+| **WiFi Button / Button Plus** | Choose what a single, double or long press (and touch on the Plus) does: switch a device on, off or toggle it, or run a scene. Battery level. |
+| **WiFi Motion Sensor** | Motion, brightness and temperature (with history). "Light on motion": switches chosen devices on, optionally only when it is dark, and off again after a few minutes without motion |
 
-- **Szenen:** mehrere Steckdosen mit einem Tipp schalten.
-- **Alarme als Push-Mitteilung:**
-  - Steckdose offline
-  - ungewöhnlich hoher Verbrauch (verglichen mit den letzten 14 Tagen)
-  - Steckdose eingeschaltet
-  - Steckdose zu warm
-- **Standort und Strompreis** stellst du unter „Mehr“ ein. Den Ort tippst du ein (Suche bei Open-Meteo) oder übernimmst ihn vom Handy. Er dient nur für Sonnenauf- und -untergang.
+Devices announce themselves on the network (UDP broadcast on port 7979) and are added automatically; a changed IP is picked up as well. If a device doesn't show up, you can add it by IP in the settings. Buttons sleep to save battery and appear after their first press.
 
-Die Tastensperre und die Temperatur-Korrektur wirken in der App. Die Einstellungen in der Steckdose selbst bleiben unverändert, der Knopf am Gerät schaltet also weiterhin.
+## Features
 
-## Starten
+- **Switching:** swipe a tile left or right on the home screen, as in the myStrom app; tap opens the device.
+- **Metering:** power, energy (from the socket's own counter) and temperature every 30 seconds, stored without limit. Day curve and week/month/year bars, several devices combined, CSV export.
+- **Rules** run on the server, so they work while your phone is off:
+
+| Rule | What it does |
+|---|---|
+| Schedule | On and off at fixed times; several schedules for different weekdays. Option "only switch off once it's no longer in use": from the off time, the socket waits until the power stays below a threshold for a while (so your PC isn't cut off while you're still working) |
+| Holiday (Home Guard) | Morning and evening on/off at times that change daily, so the house looks lived in |
+| Sun | On at sunset, off at sunrise, with an offset |
+| Timer | Off again X minutes after every switch-on |
+| Power saving | Off when in standby; back on manually, at a time or after X hours |
+| Power Actions | When above/below X watts for Y minutes: notification (e.g. "washing machine done"), switch off, or switch another device |
+| Temperature | Off when the socket gets too hot; temperature history per device |
+
+- **Scenes:** switch several devices with one tap, or automatically at a fixed time.
+- **Push notifications:** device offline, unusually high consumption (compared with the last 14 days), switched on, too hot.
+- **Location and electricity price** are set in the app. The location is only used for sunrise and sunset (typed in and looked up once via Open-Meteo, or taken from the phone).
+- Two designs: "Modern" (default) and one close to the original myStrom app.
+
+The key lock and the temperature correction act inside the app; the device itself is not reconfigured, so its physical button keeps working.
+
+## Run it
+
+With Docker:
 
 ```bash
+git clone https://github.com/jjoeojieajfhpdsonf/myStrom mystrom-app && cd mystrom-app
 docker compose up -d --build
 ```
 
-Danach läuft die App auf Port 8091 (in `.env` mit `MYSTROM_PORT` änderbar). Der Container läuft im Host-Netz, sonst kämen die Meldungen der Steckdosen nicht an.
+The app then runs on port 8091. The container uses the host network, otherwise the devices' UDP announcements wouldn't arrive.
 
-Ausprobieren ohne Steckdosen geht so:
+Without Docker you need Node.js 22.5 or newer (built-in `node:sqlite`):
+
+```bash
+node server.js
+```
+
+Try it without any devices (three sockets, a bulb, a button and a motion sensor are simulated):
 
 ```bash
 DEMO=1 PORT=8095 DB_PATH=/tmp/demo.db node server.js
 ```
 
-## Auf dem Ubuntu-Server
+Open the app on your phone and choose "Add to Home Screen". On the iPhone, push notifications only work from the home-screen app, and they need HTTPS, for example via `tailscale serve` or a reverse proxy.
 
-```bash
-git clone <repo> ~/mystrom-app && cd ~/mystrom-app
-docker compose up -d --build
-sudo tailscale serve --bg --https=8443 http://127.0.0.1:8091
-```
+### Configuration
 
-Die App ist dann unter `https://<your-server>.ts.net:8443` erreichbar. Auf dem iPhone in Safari öffnen und „Zum Home-Bildschirm“ wählen. Erst danach sind Push-Mitteilungen möglich.
+All settings are optional environment variables:
 
-## Daten
+| Variable | Default | Meaning |
+|---|---|---|
+| `PORT` | `8091` | HTTP port |
+| `POLL_SECONDS` | `30` | How often devices are read |
+| `DB_PATH` | `data/mystrom.db` | SQLite database |
+| `TZ` | `Europe/Zurich` | Time zone for schedules and charts |
+| `DEVICES` | – | Comma-separated IPs to add in addition to automatic discovery |
+| `LAN_URL` | first IPv4 address + port | Address under which buttons can reach this server, e.g. `192.168.1.10:8091` |
+| `TARIFF` | `0.30` | Initial electricity price per kWh (changeable in the app) |
+| `LAT`, `LON` | Zurich | Initial location for sunrise/sunset (changeable in the app) |
+| `PUSH_CONTACT` | `mailto:mystrom-app@example.com` | Contact sent to push services (VAPID) |
+| `DEMO` | – | `1` simulates devices instead of talking to real ones |
 
-`data/mystrom.db` (SQLite) enthält Geräte, Regeln, Messwerte, Verlauf und die Push-Schlüssel. Jede Nacht ab 3 Uhr kommt eine Kopie nach `data/backup/`, die letzten 14 Tage bleiben erhalten.
+## Security
 
-## Benutzte Schnittstelle der Steckdose
+The app has **no login**. Anyone who can reach the port can switch your devices. Run it only on a trusted network, or expose it only through something like Tailscale or a reverse proxy with authentication. The myStrom devices' own REST interfaces are unauthenticated as well, so the same applies to your Wi-Fi.
 
-| Aufruf | Zweck |
+## Data
+
+`data/mystrom.db` (SQLite) contains devices, rules, measurements, history and the push keys. Every night after 3 am a copy is written to `data/backup/`; the last 14 days are kept.
+
+## Device interfaces used
+
+| Device | Call | Purpose |
+|---|---|---|
+| all | `GET /api/v1/info` | MAC, type, firmware |
+| Switch | `GET /report` | Power, relay, temperature, energy since boot |
+| Switch | `GET /relay?state=1` / `0` | Switch |
+| Bulb, LED Strip | `GET/POST /api/v1/device/<MAC>` | State, power; `action=on/off`, `color=H;S;V`, `ramp` |
+| Button | `GET/POST /api/v1/device/<MAC>` | Battery; set the URLs for `single`, `double`, `long`, `touch` |
+| Motion Sensor | `GET /api/v1/sensors` | Motion, light, temperature |
+
+Bulb, Button and Motion Sensor support follows myStrom's published REST documentation and has been tested against simulated devices; reports from real hardware are welcome.
+
+## App API
+
+The web app talks to the server over a small JSON API, which you can also use for your own scripts:
+
+| Endpoint | Purpose |
 |---|---|
-| `GET /report` | Leistung, Relais, Temperatur, Energie seit Start |
-| `GET /relay?state=1` bzw. `0` | Schalten |
-| `GET /api/v1/info` | MAC, Typ, Firmware |
+| `GET /api/state` | All devices with live values, settings, scenes |
+| `PUT /api/devices/<MAC>` | Change a device's settings (`{ "cfg": { … } }`) |
+| `POST /api/devices/<MAC>/relay` | Switch (`{ "on": true }`) |
+| `POST /api/devices/<MAC>/light` | Bulb colour (`{ "h": 30, "s": 20, "v": 80 }`) |
+| `GET /api/curve?mac=<MAC>[,<MAC>…]&day=YYYY-MM-DD` | Day curve in 5-minute steps (`all` for every device) |
+| `GET /api/bars?mac=…&period=week\|month\|year&ref=YYYY-MM-DD` | Energy per day or month |
+| `GET /api/temp?mac=<MAC>&period=day\|week\|month&ref=YYYY-MM-DD` | Temperature history |
+| `GET /api/totals?mac=…` | Energy this week, month, year, total |
+| `GET /api/export.csv?mac=…&from=…&to=…&res=raw\|5min\|hour\|day` | CSV export |
+| `GET /api/events?mac=<MAC>` | Switching history |
+| `PUT /api/scenes`, `POST /api/scenes/<id>/run` | Scenes |
+| `GET /api/button/<MAC>/<single\|double\|long\|touch>` | Called by a button; runs its action |
+
+## License
+
+[MIT](LICENSE)

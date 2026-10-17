@@ -6,6 +6,6 @@ node_modules/
 .DS_Store
 .env
 
-# Screenshots zum Nachbauen, gehören nicht ins Repo
+# Reference screenshots for rebuilding, don't belong in the repo
 CleanShot*
 screenshots/

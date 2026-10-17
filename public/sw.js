@@ -1,6 +1,6 @@
-// Service Worker: Alarme als Mitteilung anzeigen, beim Antippen die passende Steckdose öffnen (#dev/MAC),
-// und schneller Start: App-Dateien frisch vom Server, nach 2 s ohne Netz die zuletzt gespeicherte Version. Daten (/api/) nie.
-const CACHE = 'steckdosen-v3'; // bei neuen Dateien hochzählen, damit alte Versionen verschwinden
+// Service worker: show alarms as notifications, open the matching socket on tap (#dev/MAC),
+// and fast startup: app files fresh from the server, after 2 s without network the last cached version. Never data (/api/).
+const CACHE = 'steckdosen-v3'; // bump when files change so old versions get removed
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil((async () => {
   for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k);

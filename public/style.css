@@ -264,3 +264,5 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .row.bright input[type=range] { flex: 1; min-width: 120px; max-width: 220px; accent-color: var(--acc); background: transparent; padding: 0; }
 .hero .dim { display: block; color: var(--mut); font-size: 14px; }
 .hero.live { color: var(--acc); }
+/* device diagnostics: raw endpoint list of the firmware */
+.diag { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(--mut); margin: 0 4px 24px; }

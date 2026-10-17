@@ -589,7 +589,9 @@ function featureHTML(d, k, sub) {
       <div class="ls">${lrow('Name', '<input type="text" data-roomnew="1" placeholder="z. B. Werkstatt" maxlength="40" enterkeyhint="done" autocomplete="off" style="background:#2a2a2a;color:var(--fg);padding:7px 9px;text-align:left;max-width:200px">')}</div>
       <button type="button" class="btn" data-roomadd="1">Hinzufügen</button>`;
     case 'tech': return head + `<div class="ls">${[['Typ', d.typeName], ['Firmware', d.fw || '–'], ['IP-Adresse', d.ip], ['MAC', d.mac.match(/../g).join(':')], ['Verbindung', d.online ? 'erreichbar' : 'offline'],
-      ['Temperatur gemessen', d.tempRaw != null ? `${d.tempRaw.toFixed(1)} °C` : '–']].map(([l, v]) => row(l, val(esc(v)))).join('')}</div>`;
+      ['Temperatur gemessen', d.tempRaw != null ? `${d.tempRaw.toFixed(1)} °C` : '–']].map(([l, v]) => row(l, val(esc(v)))).join('')}</div>
+      <p class="sec">Im Gerät gespeichert</p><div class="ls" data-diag="${d.mac}" data-keep="${d.mac}">${row('Lädt …', '')}</div>
+      <p class="sec">Schnittstellen der Firmware</p><pre class="diag" data-diaghelp="${d.mac}" data-keep="${d.mac}"></pre>`;
     default: return '';
   }
 }
@@ -809,6 +811,15 @@ async function fillCharts() {
       const foot = $('[data-tfoot]');
       if (foot) { foot.dataset.filled = foot.dataset.keep; foot.innerHTML = [['Tiefst', t.min], ['Mittel', t.avg], ['Höchst', t.max]].map(([l, v]) => `<div><b>${deg(v)}<small> °C</small></b><span>${l}</span></div>`).join('<i></i>'); }
     } catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  }
+  for (const el of document.querySelectorAll('[data-diag]:not([data-filled])')) {
+    el.dataset.filled = el.dataset.keep;
+    try {
+      const g = await api(`api/devices/${el.dataset.diag}/diag`);
+      if (!el.isConnected) return;
+      el.innerHTML = typeof g.settings === 'object' ? Object.entries(g.settings).map(([k, v]) => row(esc(k), val(esc(JSON.stringify(v))))).join('') : row(esc(String(g.settings)), '');
+      const h = $(`[data-diaghelp="${el.dataset.diag}"]`); if (h) { h.dataset.filled = h.dataset.keep; h.textContent = g.help; }
+    } catch (e) { el.innerHTML = row(esc(e.message), ''); }
   }
   for (const el of document.querySelectorAll('[data-totals]:not([data-filled])')) {
     el.dataset.filled = el.dataset.keep;

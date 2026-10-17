@@ -774,6 +774,15 @@ const server = http.createServer(async (req, res) => {
       await setRelay(dev.mac, Boolean(b.on), 'von Hand in der App');
       return json(deviceJson(dev));
     }
+    // read-only diagnostics: what the device itself reports (settings, list of firmware endpoints)
+    const gm = /^\/api\/devices\/([0-9A-Z]{12})\/diag$/.exec(p);
+    if (gm && req.method === 'GET') {
+      const d = devices.get(gm[1]); if (!d) return json({ error: 'Unbekanntes Gerät.' }, 404);
+      if (CFG.demo) return json({ settings: { rest: true, panel: true, hap_disable: false, name: '', temp_offset: 0 }, help: '(Demo)' });
+      const get = async (path) => { try { const r = await fetch(`http://${d.ip}${path}`, { signal: AbortSignal.timeout(4000) }); return (await r.text()).slice(0, 8000); } catch (e) { return `! ${e.message}`; } };
+      const raw = await get('/api/v1/settings'); let settings; try { settings = JSON.parse(raw); } catch { settings = raw; }
+      return json({ settings, help: await get('/help') });
+    }
     const lm = /^\/api\/devices\/([0-9A-Z]{12})\/light$/.exec(p);
     if (lm && req.method === 'POST') {
       const d = devices.get(lm[1]); if (!d || kindOf(d) !== 'bulb') return json({ error: 'Keine Lampe.' }, 404);

@@ -10,16 +10,20 @@ const pw = (w) => (w < 1000 ? `${Math.round(w)} W` : `${(w / 1000).toFixed(2)} k
 const pwN = (w) => (w < 1000 ? [String(Math.round(w)), 'W'] : [(w / 1000).toFixed(2), 'kW']);
 const kwh = (wh) => (wh / 1000).toFixed(2);
 const chf = (wh) => (wh / 1000 * (S?.settings.price || 0)).toFixed(2);
-const dShort = (day) => { const [, m, d] = day.split('-').map(Number); return `${d}.${m}.`; };
-const addDays = (day, n) => { const d = new Date(`${day}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
-const MONTHS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
-const dayLabel = (day) => (day === S.today ? 'Heute' : day === addDays(S.today, -1) ? 'Gestern' : `${Number(day.slice(8))}. ${MONTHS[Number(day.slice(5, 7)) - 1]}`);
 const dev = (mac) => S.devices.find((d) => d.mac === mac);
 // UI language (setting on the server): German is the source text and the key, English comes from I18N_EN (i18n.js);
-// {0}, {1} … are placeholders, e.g. tr('Aus seit {0}', clock)
+// {0}, {1} … are placeholders, e.g. the key 'Aus seit {0}' with the clock time as argument
 const lang = () => (S?.settings?.lang === 'en' ? 'en' : 'de');
 const tr = (de, ...a) => (lang() === 'en' ? I18N_EN[de] ?? de : de).replace(/\{(\d)\}/g, (_, i) => a[i] ?? '');
 const LOC = () => (lang() === 'en' ? 'en-GB' : 'de-CH');
+// decimal comma in German, point in English
+const dec = (x) => (lang() === 'en' ? String(x) : String(x).replace('.', ','));
+const dShort = (day) => { const [, m, d] = day.split('-').map(Number); return tr('{0}.{1}.', d, m); };
+const addDays = (day, n) => { const d = new Date(`${day}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+// month and weekday names are functions, so they follow the language (at module load S is not there yet)
+const MONTHS = () => [tr('Jan'), tr('Feb'), tr('Mär'), tr('Apr'), tr('Mai'), tr('Jun'), tr('Jul'), tr('Aug'), tr('Sep'), tr('Okt'), tr('Nov'), tr('Dez')];
+const dayLabel = (day) => (day === S.today ? tr('Heute') : day === addDays(S.today, -1) ? tr('Gestern') : tr('{0}. {1}', Number(day.slice(8)), MONTHS()[Number(day.slice(5, 7)) - 1]));
+const nDev = (n) => (n === 1 ? tr('1 Gerät') : tr('{0} Geräte', n));
 // switchable and with consumption: plugs and bulbs (not buttons, motion sensors)
 const canSwitch = (d) => d.kind === 'switch' || d.kind === 'bulb';
 const SW = () => S.devices.filter(canSwitch);
@@ -48,13 +52,13 @@ const I = {
 };
 
 // Features per plug: key = section in the settings
-const FEAT = [
-  ['schedule', 'clock', 'Zeitplan'], ['actions', 'pact', 'Power Actions'], ['vacation', 'beach', 'Ferien'],
-  ['sun', 'sun', 'Sonne'], ['timer', 'timer', 'Timer'], ['saver', 'leaf', 'Stromsparen'],
-  ['temp', 'temp', 'Temperatur'], ['alarms', 'bell', 'Alarme'], ['eval', 'evals', 'Auswertung'],
+const FEAT = () => [
+  ['schedule', 'clock', tr('Zeitplan')], ['actions', 'pact', 'Power Actions'], ['vacation', 'beach', tr('Ferien')],
+  ['sun', 'sun', tr('Sonne')], ['timer', 'timer', tr('Timer')], ['saver', 'leaf', tr('Stromsparen')],
+  ['temp', 'temp', tr('Temperatur')], ['alarms', 'bell', tr('Alarme')], ['eval', 'evals', tr('Auswertung')],
 ];
-const FTITLE = { btn: 'Taster', schedule: 'Zeitplan', vacation: 'Ferienmodus', sun: 'Sonne', timer: 'Timer', saver: 'Stromsparen',
-  temp: 'Temperatur', alarms: 'Alarme', eval: 'Auswertung', settings: 'Einstellungen', tech: 'Technische Details', room: 'Raum wählen', roomnew: 'Eigener Raum', icon: 'Symbol wählen', actions: 'Power Actions' };
+const FTITLE = () => ({ btn: tr('Taster'), schedule: tr('Zeitplan'), vacation: tr('Ferienmodus'), sun: tr('Sonne'), timer: tr('Timer'), saver: tr('Stromsparen'),
+  temp: tr('Temperatur'), alarms: tr('Alarme'), eval: tr('Auswertung'), settings: tr('Einstellungen'), tech: tr('Technische Details'), room: tr('Raum wählen'), roomnew: tr('Eigener Raum'), icon: tr('Symbol wählen'), actions: 'Power Actions' });
 const RI = (d) => `<svg viewBox="0 0 64 64" width="58" height="58" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">${d}</svg>`;
 const ROOM_ICON = {
   sofa: RI('<path d="M10 26h44v16H10zM14 26v-6h36v6M10 42v4M54 42v4M10 32h44"/><path d="M6 30h4v12H6zM54 30h4v12h-4z"/>'),
@@ -79,42 +83,42 @@ const ROOM_ICON = {
   none: RI('<path d="M14 14h36v36H14z" stroke-dasharray="4 4"/>'),
 };
 // Presets like in the myStrom app, alphabetical
-const ROOMS = [['Babyzimmer', 'baby'], ['Badezimmer', 'bath'], ['Balkon', 'balcony'], ['Büro', 'office'], ['Esszimmer', 'dining'], ['Estrich', 'attic'], ['Flur', 'hall'],
-  ['Garage', 'garage'], ['Garten', 'garden'], ['Gästezimmer', 'guest'], ['Heimkino', 'cinema'], ['Keller', 'stairs'], ['Kinderzimmer', 'kids'], ['Küche', 'kitchen'],
-  ['Schlafzimmer', 'bed'], ['Waschküche', 'laundry'], ['Werkstatt', 'workshop'], ['Wohnzimmer', 'sofa']];
+const ROOMS = [['Babyzimmer', 'baby', () => tr('Babyzimmer')], ['Badezimmer', 'bath', () => tr('Badezimmer')], ['Balkon', 'balcony', () => tr('Balkon')], ['Büro', 'office', () => tr('Büro')], ['Esszimmer', 'dining', () => tr('Esszimmer')], ['Estrich', 'attic', () => tr('Estrich')], ['Flur', 'hall', () => tr('Flur')],
+  ['Garage', 'garage', () => tr('Garage')], ['Garten', 'garden', () => tr('Garten')], ['Gästezimmer', 'guest', () => tr('Gästezimmer')], ['Heimkino', 'cinema', () => tr('Heimkino')], ['Keller', 'stairs', () => tr('Keller')], ['Kinderzimmer', 'kids', () => tr('Kinderzimmer')], ['Küche', 'kitchen', () => tr('Küche')],
+  ['Schlafzimmer', 'bed', () => tr('Schlafzimmer')], ['Waschküche', 'laundry', () => tr('Waschküche')], ['Werkstatt', 'workshop', () => tr('Werkstatt')], ['Wohnzimmer', 'sofa', () => tr('Wohnzimmer')]];
 // Device icons: what is plugged into the plug
 const DI = (d) => `<svg viewBox="0 0 64 64" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">${d}</svg>`;
 const DEV_ICONS = [
-  ['plug', 'Steckdose', null],
-  ['bulb', 'Glühbirne', DI('<path d="M22 30a12 12 0 1 1 20 0c-3 4-5 7-5 12H27c0-5-2-8-5-12zM27 48h10M28 54h8"/>')],
-  ['strip', 'LED-Streifen', DI('<path d="M6 40c10-14 18-14 26 0s16 14 26 0"/><circle cx="13" cy="31" r="1.6" fill="currentColor"/><circle cx="25" cy="31" r="1.6" fill="currentColor"/><circle cx="39" cy="49" r="1.6" fill="currentColor"/><circle cx="51" cy="49" r="1.6" fill="currentColor"/>')],
-  ['button', 'Taster', DI('<rect x="14" y="14" width="36" height="36" rx="10"/><circle cx="32" cy="32" r="7"/>')],
-  ['motion', 'Bewegungsmelder', DI('<circle cx="32" cy="36" r="12"/><circle cx="32" cy="36" r="4"/><path d="M18 14a20 20 0 0 1 28 0M23 20a12 12 0 0 1 18 0"/>')],
-  ['lamp', 'Tischlampe', DI('<path d="M22 10h20l8 22H14zM32 32v18M22 54h20"/>')],
-  ['floor', 'Stehlampe', DI('<path d="M24 6h16l6 14H18zM32 20v34M24 56h16"/>')],
-  ['monitor', 'Bildschirm', DI('<path d="M8 12h48v30H8zM26 52h12M32 42v10"/>')],
-  ['pc', 'Computer', DI('<path d="M18 6h28v52H18zM24 14h16M24 20h16"/><circle cx="32" cy="46" r="3"/>')],
-  ['desk', 'Arbeitsplatz', DI('<path d="M20 12h24v16H20zM32 28v6M26 34h12M8 40h48M12 40v16M52 40v16"/>')],
-  ['tv', 'Fernseher', DI('<path d="M6 16h52v32H6zM24 54h16M26 10l6 6 6-6"/>')],
-  ['mirror', 'Smart Mirror', DI('<path d="M16 6h32v52H16zM20 10h24v44H20zM24 16h8M24 21h12M24 26h6"/>')],
-  ['speaker', 'Lautsprecher', DI('<rect x="18" y="6" width="28" height="52" rx="4"/><circle cx="32" cy="38" r="9"/><circle cx="32" cy="19" r="4"/>')],
-  ['coffee', 'Kaffeemaschine', DI('<path d="M14 22h28v16a10 10 0 0 1-10 10h-8a10 10 0 0 1-10-10zM42 26h4a6 6 0 0 1 0 12h-4M10 54h40M22 8c0 4 4 4 4 8M30 8c0 4 4 4 4 8"/>')],
-  ['kettle', 'Wasserkocher', DI('<path d="M18 20h24l4 34H14zM42 24c9 0 9 18 0 18M24 14h12M30 14v6"/>')],
-  ['fan', 'Ventilator', DI('<circle cx="32" cy="26" r="17"/><path d="M32 26c0-8 6-12 10-10s-2 10-10 10zM32 26c-7 4-14 1-13-4s10-3 13 4zM32 26c7 4 6 12 2 13s-6-6-2-13zM32 43v9M22 56h20"/>')],
-  ['heater', 'Heizung', DI('<path d="M10 16h44v32H10zM19 16v32M28 16v32M37 16v32M46 16v32M14 48v6M50 48v6"/>')],
-  ['washer', 'Waschmaschine', DI('<path d="M14 6h36v52H14zM14 16h36"/><circle cx="32" cy="36" r="11"/><circle cx="20" cy="11" r="1.5"/>')],
-  ['fridge', 'Kühlschrank', DI('<path d="M18 4h28v56H18zM18 24h28M24 12v6M24 30v10"/>')],
-  ['router', 'Router', DI('<path d="M8 36h48v14H8zM16 36l-4-20M48 36l4-20M16 43h3M24 43h3M32 43h3"/>')],
-  ['charger', 'Ladestation', DI('<path d="M20 6h24v52H20zM34 20l-6 11h8l-6 11"/>')],
-  ['printer', 'Drucker', DI('<path d="M14 24h36v20H14zM22 24V8h20v16M22 36h20v20H22zM42 30h2"/>')],
-  ['plant', 'Pflanzenlicht', DI('<path d="M20 40h24l-4 16H24zM32 40V24M32 30c-8 0-12-6-12-12 8 0 12 6 12 12M32 26c6 0 10-4 10-10-6 0-10 4-10 10"/>')],
-  ['tree', 'Weihnachtsbaum', DI('<path d="M32 4l12 16h-6l10 14h-8l10 14H14l10-14h-8l10-14h-6zM32 48v10"/>')],
+  ['plug', () => tr('Steckdose'), null],
+  ['bulb', () => tr('Glühbirne'), DI('<path d="M22 30a12 12 0 1 1 20 0c-3 4-5 7-5 12H27c0-5-2-8-5-12zM27 48h10M28 54h8"/>')],
+  ['strip', () => tr('LED-Streifen'), DI('<path d="M6 40c10-14 18-14 26 0s16 14 26 0"/><circle cx="13" cy="31" r="1.6" fill="currentColor"/><circle cx="25" cy="31" r="1.6" fill="currentColor"/><circle cx="39" cy="49" r="1.6" fill="currentColor"/><circle cx="51" cy="49" r="1.6" fill="currentColor"/>')],
+  ['button', () => tr('Taster'), DI('<rect x="14" y="14" width="36" height="36" rx="10"/><circle cx="32" cy="32" r="7"/>')],
+  ['motion', () => tr('Bewegungsmelder'), DI('<circle cx="32" cy="36" r="12"/><circle cx="32" cy="36" r="4"/><path d="M18 14a20 20 0 0 1 28 0M23 20a12 12 0 0 1 18 0"/>')],
+  ['lamp', () => tr('Tischlampe'), DI('<path d="M22 10h20l8 22H14zM32 32v18M22 54h20"/>')],
+  ['floor', () => tr('Stehlampe'), DI('<path d="M24 6h16l6 14H18zM32 20v34M24 56h16"/>')],
+  ['monitor', () => tr('Bildschirm'), DI('<path d="M8 12h48v30H8zM26 52h12M32 42v10"/>')],
+  ['pc', () => tr('Computer'), DI('<path d="M18 6h28v52H18zM24 14h16M24 20h16"/><circle cx="32" cy="46" r="3"/>')],
+  ['desk', () => tr('Arbeitsplatz'), DI('<path d="M20 12h24v16H20zM32 28v6M26 34h12M8 40h48M12 40v16M52 40v16"/>')],
+  ['tv', () => tr('Fernseher'), DI('<path d="M6 16h52v32H6zM24 54h16M26 10l6 6 6-6"/>')],
+  ['mirror', () => tr('Smart Mirror'), DI('<path d="M16 6h32v52H16zM20 10h24v44H20zM24 16h8M24 21h12M24 26h6"/>')],
+  ['speaker', () => tr('Lautsprecher'), DI('<rect x="18" y="6" width="28" height="52" rx="4"/><circle cx="32" cy="38" r="9"/><circle cx="32" cy="19" r="4"/>')],
+  ['coffee', () => tr('Kaffeemaschine'), DI('<path d="M14 22h28v16a10 10 0 0 1-10 10h-8a10 10 0 0 1-10-10zM42 26h4a6 6 0 0 1 0 12h-4M10 54h40M22 8c0 4 4 4 4 8M30 8c0 4 4 4 4 8"/>')],
+  ['kettle', () => tr('Wasserkocher'), DI('<path d="M18 20h24l4 34H14zM42 24c9 0 9 18 0 18M24 14h12M30 14v6"/>')],
+  ['fan', () => tr('Ventilator'), DI('<circle cx="32" cy="26" r="17"/><path d="M32 26c0-8 6-12 10-10s-2 10-10 10zM32 26c-7 4-14 1-13-4s10-3 13 4zM32 26c7 4 6 12 2 13s-6-6-2-13zM32 43v9M22 56h20"/>')],
+  ['heater', () => tr('Heizung'), DI('<path d="M10 16h44v32H10zM19 16v32M28 16v32M37 16v32M46 16v32M14 48v6M50 48v6"/>')],
+  ['washer', () => tr('Waschmaschine'), DI('<path d="M14 6h36v52H14zM14 16h36"/><circle cx="32" cy="36" r="11"/><circle cx="20" cy="11" r="1.5"/>')],
+  ['fridge', () => tr('Kühlschrank'), DI('<path d="M18 4h28v56H18zM18 24h28M24 12v6M24 30v10"/>')],
+  ['router', () => tr('Router'), DI('<path d="M8 36h48v14H8zM16 36l-4-20M48 36l4-20M16 43h3M24 43h3M32 43h3"/>')],
+  ['charger', () => tr('Ladestation'), DI('<path d="M20 6h24v52H20zM34 20l-6 11h8l-6 11"/>')],
+  ['printer', () => tr('Drucker'), DI('<path d="M14 24h36v20H14zM22 24V8h20v16M22 36h20v20H22zM42 30h2"/>')],
+  ['plant', () => tr('Pflanzenlicht'), DI('<path d="M20 40h24l-4 16H24zM32 40V24M32 30c-8 0-12-6-12-12 8 0 12 6 12 12M32 26c6 0 10-4 10-10-6 0-10 4-10 10"/>')],
+  ['tree', () => tr('Weihnachtsbaum'), DI('<path d="M32 4l12 16h-6l10 14h-8l10 14H14l10-14h-8l10-14h-6zM32 48v10"/>')],
 ];
 // custom icon, else guessed from the name, else the plug
-const GUESS = [[/lamp|licht|leuchte/, 'lamp'], [/mirror|spiegel/, 'mirror'], [/\btv\b|fernseh/, 'tv'], [/bildschirm|monitor/, 'monitor'], [/\bpc\b|computer|rechner/, 'pc'],
-  [/schreibtisch|büro|arbeit/, 'desk'], [/kaffee|espresso/, 'coffee'], [/wasserkocher/, 'kettle'], [/ventilator/, 'fan'], [/heiz|radiator/, 'heater'],
-  [/wasch/, 'washer'], [/kühl/, 'fridge'], [/router|wlan|wifi/, 'router'], [/ladestation|ladeger/, 'charger'], [/drucker/, 'printer'], [/pflanz/, 'plant'],
-  [/weihnacht|tannenbaum/, 'tree'], [/lautsprecher|sonos/, 'speaker']];
+const GUESS = [[/lamp|licht|leuchte|light/, 'lamp'], [/mirror|spiegel/, 'mirror'], [/\btv\b|fernseh/, 'tv'], [/bildschirm|monitor|screen/, 'monitor'], [/\bpc\b|computer|rechner/, 'pc'],
+  [/schreibtisch|büro|arbeit|desk|office/, 'desk'], [/kaffee|espresso|coffee/, 'coffee'], [/wasserkocher|kettle/, 'kettle'], [/ventilator|\bfan\b/, 'fan'], [/heiz|radiator|heater/, 'heater'],
+  [/wasch|washer|washing/, 'washer'], [/kühl|fridge/, 'fridge'], [/router|wlan|wifi/, 'router'], [/ladestation|ladeger|charger/, 'charger'], [/drucker|printer/, 'printer'], [/pflanz|plant/, 'plant'],
+  [/weihnacht|tannenbaum|christmas/, 'tree'], [/lautsprecher|sonos|speaker/, 'speaker']];
 function iconKey(d) {
   if (d.cfg.icon && DEV_ICONS.some(([k]) => k === d.cfg.icon)) return d.cfg.icon;
   if (d.kind === 'bulb') return d.type === 105 ? 'strip' : 'bulb';
@@ -123,31 +127,35 @@ function iconKey(d) {
   return GUESS.find(([re]) => re.test(n))?.[1] || 'plug';
 }
 const devIcon = (d) => DEV_ICONS.find(([k]) => k === iconKey(d))[2] || I.plug;
-const iconName = (d) => DEV_ICONS.find(([k]) => k === iconKey(d))[1];
+const iconName = (d) => DEV_ICONS.find(([k]) => k === iconKey(d))[1]();
 const roomIcon = (r) => ROOM_ICON[ROOMS.find(([n]) => n === r)?.[1]] || ROOM_ICON.sofa;
-const WD = [[1, 'Mo'], [2, 'Di'], [3, 'Mi'], [4, 'Do'], [5, 'Fr'], [6, 'Sa'], [0, 'So']];
+// rooms are stored in German; predefined ones are shown translated, self-typed ones as typed
+const roomLabel = (r) => ROOMS.find(([n]) => n === r)?.[2]() ?? r;
+const WD = () => [[1, tr('Mo')], [2, tr('Di')], [3, tr('Mi')], [4, tr('Do')], [5, tr('Fr')], [6, tr('Sa')], [0, tr('So')]];
 function daysText(days) {
-  if (days.length === 7) return 'täglich';
-  if (days.length === 5 && [1, 2, 3, 4, 5].every((x) => days.includes(x))) return 'Mo–Fr';
-  if (days.length === 2 && days.includes(0) && days.includes(6)) return 'Sa, So';
-  return WD.filter(([n]) => days.includes(n)).map(([, l]) => l).join(', ') || 'nie';
+  if (days.length === 7) return tr('täglich');
+  if (days.length === 5 && [1, 2, 3, 4, 5].every((x) => days.includes(x))) return tr('Mo–Fr');
+  if (days.length === 2 && days.includes(0) && days.includes(6)) return tr('Sa, So');
+  return WD().filter(([n]) => days.includes(n)).map(([, l]) => l).join(', ') || tr('nie');
 }
+// vacation slots come from the server with the key 'morgens' / 'abends'
+const slotName = (k) => (k === 'morgens' ? tr('morgens') : k === 'abends' ? tr('abends') : k);
 // is the feature enabled, and what does it do (short form for the tile)
 // which alarms exist per type: bulbs don't measure temperature, motion sensors no consumption
 const alarmKeys = (d) => (d.kind === 'motion' ? ['offline', 'hot'] : d.kind === 'bulb' ? ['offline', 'unusual', 'switchedOn'] : ['offline', 'unusual', 'switchedOn', 'hot']);
 function featInfo(d, k) {
   const c = d.cfg;
   switch (k) {
-    case 'motion': { const n = c.motion.targets.filter((m) => dev(m)).length; return [c.motion.on, `${n} Gerät${n === 1 ? '' : 'e'}${c.motion.dark ? ', wenn dunkel' : ''} · aus nach ${dur(c.motion.mins)}`]; }
-    case 'schedule': { const e = c.schedule.entries; return [c.schedule.on, e.length === 1 ? `${e[0].start}–${e[0].end}${e[0].idle ? ' oder später' : ` · ${daysText(e[0].days)}`}` : `${e.length} Zeitpläne · ${daysText(e.flatMap((x) => x.days))}`]; }
+    case 'motion': { const n = nDev(c.motion.targets.filter((m) => dev(m)).length); return [c.motion.on, tr('{0} · aus nach {1}', c.motion.dark ? tr('{0}, wenn dunkel', n) : n, dur(c.motion.mins))]; }
+    case 'schedule': { const e = c.schedule.entries; return [c.schedule.on, e.length === 1 ? (e[0].idle ? tr('{0}–{1} oder später', e[0].start, e[0].end) : `${e[0].start}–${e[0].end} · ${daysText(e[0].days)}`) : tr('{0} Zeitpläne · {1}', e.length, daysText(e.flatMap((x) => x.days)))]; }
     case 'vacation': return [c.vacation.on, `${dShort(c.vacation.from)}–${dShort(c.vacation.to)}`];
-    case 'sun': return [c.sun.on || c.sun.off, [c.sun.on && 'abends an', c.sun.off && 'morgens aus'].filter(Boolean).join(', ')];
-    case 'timer': return [c.timer.on, `nach ${c.timer.mins < 60 ? `${c.timer.mins} min` : `${c.timer.mins / 60} h`} aus`];
-    case 'saver': return [c.saver.on, `unter ${c.saver.below} W aus`];
-    case 'temp': return [c.temp.on, `über ${c.temp.max} °C aus`];
-    case 'alarms': { const ks = alarmKeys(d), n = ks.filter((x) => c.alarms[x]).length; return [n > 0, `${n} von ${ks.length} an`]; }
-    case 'actions': { const n = c.actions.filter((a) => a.on).length; return [n > 0, n === 1 ? actText(c.actions.find((a) => a.on)) : `${n} aktiv`]; }
-    default: return [false, `${kwh(d.todayWh)} kWh heute`];
+    case 'sun': return [c.sun.on || c.sun.off, [c.sun.on && tr('abends an'), c.sun.off && tr('morgens aus')].filter(Boolean).join(', ')];
+    case 'timer': return [c.timer.on, tr('nach {0} aus', c.timer.mins < 60 ? `${c.timer.mins} min` : `${c.timer.mins / 60} h`)];
+    case 'saver': return [c.saver.on, tr('unter {0} W aus', dec(c.saver.below))];
+    case 'temp': return [c.temp.on, tr('über {0} °C aus', c.temp.max)];
+    case 'alarms': { const ks = alarmKeys(d), n = ks.filter((x) => c.alarms[x]).length; return [n > 0, tr('{0} von {1} an', n, ks.length)]; }
+    case 'actions': { const n = c.actions.filter((a) => a.on).length; return [n > 0, n === 1 ? actText(c.actions.find((a) => a.on)) : tr('{0} aktiv', n)]; }
+    default: return [false, tr('{0} kWh heute', kwh(d.todayWh))];
   }
 }
 
@@ -155,11 +163,11 @@ function featInfo(d, k) {
 async function api(p, opt = {}) {
   const r = await fetch(p, { ...opt, headers: { 'Content-Type': 'application/json', ...opt.headers } });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || `Fehler ${r.status}`);
+  if (!r.ok) throw new Error(j.error || tr('Fehler {0}', r.status));
   return j;
 }
 async function load() {
-  try { const first = !S; S = await api('api/state'); render(first); } catch (e) { if (!S) app.innerHTML = `<p class="empty-state">Server nicht erreichbar.<br>${esc(e.message)}</p>`; }
+  try { const first = !S; S = await api('api/state'); render(first); } catch (e) { if (!S) app.innerHTML = `<p class="empty-state">${tr('Server nicht erreichbar.')}<br>${esc(e.message)}</p>`; }
 }
 // Change a device's settings: show immediately, then save
 async function saveCfg(mac, patch) {
@@ -193,10 +201,10 @@ function toast(text, err = false) {
 }
 async function switchDev(mac, on) {
   const d = dev(mac);
-  if (d.cfg.lock) { toast(`${d.name}: Tastensperre ist an`); return false; }
-  if (!d.online) { toast(`${d.name} ist nicht erreichbar`, true); return false; }
+  if (d.cfg.lock) { toast(tr('{0}: Tastensperre ist an', d.name)); return false; }
+  if (!d.online) { toast(tr('{0} ist nicht erreichbar', d.name), true); return false; }
   const before = { relay: d.relay, w: d.w, status: d.status };
-  d.relay = on; d.status = on ? 'Eingeschaltet' : 'Aus · von Hand'; if (!on) d.w = 0; render();
+  d.relay = on; d.status = on ? tr('Eingeschaltet') : tr('Aus · von Hand'); if (!on) d.w = 0; render();
   try {
     Object.assign(d, await api(`api/devices/${mac}/relay`, { method: 'POST', body: JSON.stringify({ on }) })); render();
     return true;
@@ -278,14 +286,14 @@ addEventListener('pointermove', (e) => {
   if (e.clientX - edge.x > 70) { edge = null; $('[data-back]')?.click(); }
 }, true);
 addEventListener('pointerup', () => { edge = null; }, true);
-const HD = (title, backTo, right = '<span></span>', sub = '') => `<header class="hd"><button type="button" class="ic" data-back="${backTo}" aria-label="Zurück">‹</button><b>${title}${sub ? `<small>${sub}</small>` : ''}</b>${right}</header>`;
+const HD = (title, backTo, right = '<span></span>', sub = '') => `<header class="hd"><button type="button" class="ic" data-back="${backTo}" aria-label="${tr('Zurück')}">‹</button><b>${title}${sub ? `<small>${sub}</small>` : ''}</b>${right}</header>`;
 
 // ---------- Building blocks ----------
 const sw = (path, on, label) => `<button type="button" class="sw" data-sw="${path}" aria-pressed="${on}" aria-label="${esc(label)}"></button>`;
 const row = (label, right, sub = '', attrs = '') => `<${attrs ? `button type="button" ${attrs}` : 'div'} class="row"><span class="tx"><b>${label}</b>${sub ? `<span>${sub}</span>` : ''}</span>${right}</${attrs ? 'button' : 'div'}>`;
 const inp = (path, type, value, extra = '') => `<input type="${type}" data-in="${path}" value="${esc(value)}" ${extra}>`;
 const lrow = (label, input, sub = '') => `<label class="row"><span class="tx"><b>${label}</b>${sub ? `<span>${sub}</span>` : ''}</span>${input}</label>`;
-const master = (d, k, label = 'Aktiv') => `<div class="row master"><span class="tx"><b>${label}</b></span>${sw(`${k}.on`, d.cfg[k].on, label)}</div>`;
+const master = (d, k, label = tr('Aktiv')) => `<div class="row master"><span class="tx"><b>${label}</b></span>${sw(`${k}.on`, d.cfg[k].on, label)}</div>`;
 
 // Numbers with − / + instead of free text: steps from a list of sensible values, unit right in the display
 const dur = (m) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m / 60} h`);
@@ -294,19 +302,19 @@ const DURS = [1, 2, 3, 4, ...Array.from({ length: 12 }, (_, i) => 5 + i * 5), ..
 const WATTS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 120, 150, 200, 250, 300, 400, 500, 600, 800, 1000, 1200, 1500, 2000, 2500, 3000];
 const range = (a, b, st) => Array.from({ length: Math.round((b - a) / st) + 1 }, (_, i) => Math.round((a + i * st) * 10) / 10);
 const STEPS = {
-  dur: [DURS, dur], dur240: [DURS.filter((m) => m <= 240), dur], dur0: [[0, ...DURS], (m) => (m ? dur(m) : 'sofort')],
-  watt: [WATTS, (w) => `${String(w).replace('.', ',')} W`], watt1: [WATTS.filter((w) => w >= 1), (w) => `${w} W`],
-  offs: [range(-180, 180, 5), (m) => (m ? `${m > 0 ? '+' : '−'}${dur(Math.abs(m))}` : 'genau')],
+  dur: [DURS, dur], dur240: [DURS.filter((m) => m <= 240), dur], dur0: [[0, ...DURS], (m) => (m ? dur(m) : tr('sofort'))],
+  watt: [WATTS, (w) => `${dec(w)} W`], watt1: [WATTS.filter((w) => w >= 1), (w) => `${dec(w)} W`],
+  offs: [range(-180, 180, 5), (m) => (m ? `${m > 0 ? '+' : '−'}${dur(Math.abs(m))}` : tr('genau'))],
   hours: [range(1, 48, 1), (h) => `${h} h`],
   temp: [range(20, 90, 1), (t) => `${t} °C`],
   lux: [[0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200, 300, 500], (x) => `${x} lx`],
-  tcorr: [range(-10, 10, 0.5), (t) => `${t > 0 ? '+' : t < 0 ? '−' : ''}${String(Math.abs(t)).replace('.', ',')} °C`],
+  tcorr: [range(-10, 10, 0.5), (t) => `${t > 0 ? '+' : t < 0 ? '−' : ''}${dec(Math.abs(t))} °C`],
 };
 // path: setting (e.g. timer.mins) or a:field for the currently open Power Action
 const stepper = (path, list, v, label) => {
   const [vals, fmt] = STEPS[list];
-  return `<span class="stp" role="group" aria-label="${esc(label)}"><button type="button" data-step="${path}" data-list="${list}" data-dir="-1" aria-label="weniger" ${v <= vals[0] ? 'disabled' : ''}>−</button>`
-    + `<button type="button" class="stpv" data-stpedit="${path}" data-list="${list}" data-v="${v}" aria-label="${esc(label)}: ${fmt(v)}, antippen zum Eintippen">${fmt(v)}</button><button type="button" data-step="${path}" data-list="${list}" data-dir="1" aria-label="mehr" ${v >= vals[vals.length - 1] ? 'disabled' : ''}>+</button></span>`;
+  return `<span class="stp" role="group" aria-label="${esc(label)}"><button type="button" data-step="${path}" data-list="${list}" data-dir="-1" aria-label="${tr('weniger')}" ${v <= vals[0] ? 'disabled' : ''}>−</button>`
+    + `<button type="button" class="stpv" data-stpedit="${path}" data-list="${list}" data-v="${v}" aria-label="${tr('{0}: {1}, antippen zum Eintippen', esc(label), fmt(v))}">${fmt(v)}</button><button type="button" data-step="${path}" data-list="${list}" data-dir="1" aria-label="${tr('mehr')}" ${v >= vals[vals.length - 1] ? 'disabled' : ''}>+</button></span>`;
 };
 const srow = (label, ctrl, sub = '') => `<div class="row"><span class="tx"><b>${label}</b>${sub ? `<span>${sub}</span>` : ''}</span>${ctrl}</div>`;
 // Typing: durations as h:min, else a number; clamped to the allowed range, not to the steps
@@ -328,21 +336,30 @@ const val = (t) => `<span class="val">${t}</span>`;
 const chev = (t = '') => `<span class="val">${t} ›</span>`;
 
 // Status line below the name, without the power already shown large above it
-const subOf = (d) => (!d.online ? d.status : d.relay ? d.status.replace(/^[\d.,]+ k?W( · )?/, '') : d.status === 'Aus' ? '' : d.status.replace(/^Aus · /, ''));
+// (the server writes the status in the UI language: accept German and English wording)
+const subOf = (d) => (!d.online ? d.status : d.relay ? d.status.replace(/^[\d.,]+ k?W( · )?/, '') : d.status.replace(/^(Aus|Off)( · |$)/, ''));
+// "5 min ago", "at 14:05", "on 3.10." for a timestamp (ms), formatted here so it follows the language
+const agoText = (ts) => {
+  const m = Math.round((Date.now() - ts) / 60e3), t = new Date(ts);
+  if (m < 1) return tr('gerade eben');
+  if (m < 60) return tr('vor {0} min', m);
+  if (m < 1440) return tr('um {0}', t.toLocaleTimeString(LOC(), { hour: '2-digit', minute: '2-digit' }));
+  return tr('am {0}', tr('{0}.{1}.', t.getDate(), t.getMonth() + 1));
+};
 
 // ---------- Home page ----------
 // Tile order: saved ones first, new ones (e.g. a new plug) appended at the end
-const HOME_KEYS = [['scenes', 'Szenen', 'scenes'], ['rules', 'Regeln', 'rules'], ['guard', 'Ferien', 'beach'], ['energy', 'Verbrauch', 'bolt'], ['alarms', 'Alarme', 'bell']];
+const HOME_KEYS = () => [['scenes', tr('Szenen'), 'scenes'], ['rules', tr('Regeln'), 'rules'], ['guard', tr('Ferien'), 'beach'], ['energy', tr('Verbrauch'), 'bolt'], ['alarms', tr('Alarme'), 'bell']];
 function homeOrder() {
-  const all = [...HOME_KEYS.map(([k]) => k), ...S.devices.map((d) => d.mac)], o = (S.settings.order || []).filter((k) => all.includes(k));
+  const all = [...HOME_KEYS().map(([k]) => k), ...S.devices.map((d) => d.mac)], o = (S.settings.order || []).filter((k) => all.includes(k));
   return [...o, ...all.filter((k) => !o.includes(k))];
 }
 function orderHTML() {
-  const info = (k) => { const h = HOME_KEYS.find(([x]) => x === k); if (h) return [h[1], I[h[2]]]; const d = dev(k); return [d.name, devIcon(d)]; };
-  return HD('Startseite anordnen', 'more') + '<p class="intro">Am Griff ≡ ziehen, um eine Kachel zu verschieben.</p>'
+  const info = (k) => { const h = HOME_KEYS().find(([x]) => x === k); if (h) return [h[1], I[h[2]]]; const d = dev(k); return [d.name, devIcon(d)]; };
+  return HD(tr('Startseite anordnen'), 'more') + `<p class="intro">${tr('Am Griff ≡ ziehen, um eine Kachel zu verschieben.')}</p>`
     + `<div class="ls order">${homeOrder().map((k) => { const [l, ic] = info(k); return `<div class="row" data-okey="${k}"><span class="oico" aria-hidden="true">${ic}</span><span class="tx"><b>${esc(l)}</b></span>
-      <button type="button" class="handle" data-handle aria-label="${esc(l)} verschieben (Pfeiltasten)">≡</button></div>`; }).join('')}</div>
-    <button type="button" class="btn grey" data-orderreset="1">Standard-Reihenfolge</button>`;
+      <button type="button" class="handle" data-handle aria-label="${tr('{0} verschieben (Pfeiltasten)', esc(l))}">≡</button></div>`; }).join('')}</div>
+    <button type="button" class="btn grey" data-orderreset="1">${tr('Standard-Reihenfolge')}</button>`;
 }
 const saveOrder = async (order) => { S.settings.order = order; render(); try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { order } }) }); } catch (x) { toast(x.message, true); } };
 // Dragging the handle: row follows the finger, the others make room; save on release
@@ -384,19 +401,19 @@ function homeHTML() {
   const T = {};
   const total = SW().reduce((a, d) => a + d.w, 0);
   const w1 = (w) => (w < 1000 ? `${w.toFixed(1)} W` : `${(w / 1000).toFixed(2)} kW`);
-  return `${editHome ? '<header class="hd"><span></span><b>Anordnen</b><button type="button" class="ic done" data-editdone="1">Fertig</button></header>'
-      : `<header class="hd"><span></span><b>myStrom</b><button type="button" class="ic" data-menu="1" aria-label="Menü" aria-haspopup="dialog">${I.menu}</button></header>`}
+  return `${editHome ? `<header class="hd"><span></span><b>${tr('Anordnen')}</b><button type="button" class="ic done" data-editdone="1">${tr('Fertig')}</button></header>`
+      : `<header class="hd"><span></span><b>myStrom</b><button type="button" class="ic" data-menu="1" aria-label="${tr('Menü')}" aria-haspopup="dialog">${I.menu}</button></header>`}
     <div class="grid home ${editHome ? 'editing' : ''}">
-      ${(T.scenes = tile('scenes', I.scenes, 'Szenen'), T.rules = tile('rules', I.rules, 'Regeln'), T.guard = tile('guard', I.beach, 'Ferien'),
-        T.energy = tile('energy', I.bolt, `<span class="dim">${pw(total)}</span><br>Verbrauch`), T.alarms = tile('alarms', I.bell, 'Alarme'), '')}
+      ${(T.scenes = tile('scenes', I.scenes, tr('Szenen')), T.rules = tile('rules', I.rules, tr('Regeln')), T.guard = tile('guard', I.beach, tr('Ferien')),
+        T.energy = tile('energy', I.bolt, `<span class="dim">${pw(total)}</span><br>${tr('Verbrauch')}`), T.alarms = tile('alarms', I.bell, tr('Alarme')), '')}
       ${S.devices.filter((d) => !canSwitch(d)).map((d) => (T[d.mac] = infoTile(d), '')).join('')}
       ${SW().map((d) => (T[d.mac] = `<div class="tile dev ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-mac="${d.mac}" data-okey="${d.mac}">
-        <div class="face">${d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : ''}${d.cfg.lock ? '<span class="lock" title="Tastensperre">🔒</span>' : ''}
+        <div class="face">${d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : ''}${d.cfg.lock ? `<span class="lock" title="${tr('Tastensperre')}">🔒</span>` : ''}
         <span class="ico"${bulbTint(d)}>${devIcon(d)}</span><span class="lb">${d.relay ? `${w1(d.w)}<br>` : ''}${esc(d.name)}</span>
-        ${d.online ? '' : '<span class="sub">Offline</span>'}</div>
-        <button type="button" class="hit" data-swipe="${d.mac}" aria-label="${esc(d.name)}, ${d.relay ? 'an' : 'aus'}. Öffnen; Wischen oder Leertaste schaltet"></button></div>`, '')).join('')}
+        ${d.online ? '' : `<span class="sub">${tr('Offline')}</span>`}</div>
+        <button type="button" class="hit" data-swipe="${d.mac}" aria-label="${d.relay ? tr('{0}, an. Öffnen; Wischen oder Leertaste schaltet', esc(d.name)) : tr('{0}, aus. Öffnen; Wischen oder Leertaste schaltet', esc(d.name))}"></button></div>`, '')).join('')}
       ${(editHome ? editOrder : homeOrder()).map((k) => T[k]).join('')}
-      ${S.devices.length ? '' : tile('more', I.plug, 'Gerät hinzufügen')}
+      ${S.devices.length ? '' : tile('more', I.plug, tr('Gerät hinzufügen'))}
     </div>${hint}`;
 }
 
@@ -407,88 +424,89 @@ const sockIcon = (d) => `<svg viewBox="0 0 64 64" width="56" height="56" fill="n
 const hsvCss = (h, sat, v) => `hsl(${h} ${Math.round(sat * 0.85)}% ${Math.round(45 + (100 - sat) * 0.3 + v * 0.1)}%)`;
 const bulbTint = (d) => { if (d.kind !== 'bulb' || !d.relay || !d.color) return ''; const [h, sat, v] = d.color.split(';').map(Number); return Number.isFinite(h) ? ` style="color:${hsvCss(h, sat, v)}"` : ''; };
 // Short line per type (menu, lists)
-const kindSub = (d) => (d.kind === 'button' ? (d.battery != null ? `Batterie ${d.battery} %` : d.status) : d.kind === 'motion' ? (d.online ? d.status : 'offline') : !d.online ? 'offline' : d.relay ? pw(d.w) : 'aus');
+const kindSub = (d) => (d.kind === 'button' ? (d.battery != null ? tr('Batterie {0} %', d.battery) : d.status) : d.kind === 'motion' ? (d.online ? d.status : tr('offline')) : !d.online ? tr('offline') : d.relay ? pw(d.w) : tr('aus'));
 // Buttons and motion sensors on the home page: tile with state instead of a switch
 function infoTile(d) {
   const live = d.kind === 'motion' && d.motion;
-  const sub = d.kind === 'button' ? (d.battery != null ? `Batterie ${d.battery} %` : 'noch nie gedrückt') : !d.online ? 'Offline' : d.motion ? 'Bewegung' : d.light != null ? `${d.light} lx` : '–';
+  const sub = d.kind === 'button' ? (d.battery != null ? tr('Batterie {0} %', d.battery) : tr('noch nie gedrückt')) : !d.online ? tr('Offline') : d.motion ? tr('Bewegung') : d.light != null ? `${d.light} lx` : '–';
   return `<button type="button" class="tile feat info ${live ? 'act' : ''}" data-go="dev/${d.mac}" data-okey="${d.mac}">${d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : ''}
     <span class="ico">${devIcon(d)}</span><span class="lb">${esc(d.name)}</span><span class="sub">${esc(sub)}</span></button>`;
 }
-const BTN = [['single', 'Einmal drücken'], ['double', 'Zweimal drücken'], ['long', 'Lang drücken'], ['touch', 'Berühren']];
-const btnText = (a) => (a.do === 'none' ? 'nichts' : a.do === 'scene' ? `Szene ${S.scenes.find((x) => x.id === a.scene)?.name || '?'}`
-  : `${dev(a.mac)?.name || '?'} ${{ toggle: 'umschalten', on: 'ein', off: 'aus' }[a.do]}`);
+const BTN = () => [['single', tr('Einmal drücken')], ['double', tr('Zweimal drücken')], ['long', tr('Lang drücken')], ['touch', tr('Berühren')]];
+const btnText = (a) => { const n = dev(a.mac)?.name || '?';
+  return a.do === 'none' ? tr('nichts') : a.do === 'scene' ? tr('Szene {0}', S.scenes.find((x) => x.id === a.scene)?.name || '?')
+    : a.do === 'toggle' ? tr('{0} umschalten', n) : a.do === 'on' ? tr('{0} ein', n) : tr('{0} aus', n); };
 // Bulb: tappable colors (hue, saturation) and brightness
-const SWATCHES = [['Warmweiss', 30, 35], ['Weiss', 40, 8], ['Kaltweiss', 210, 10], ['Rot', 0, 100], ['Orange', 25, 100], ['Gelb', 50, 100], ['Grün', 120, 90], ['Türkis', 180, 90], ['Blau', 225, 95], ['Violett', 275, 85], ['Pink', 320, 80]];
+const SWATCHES = () => [[tr('Warmweiss'), 30, 35], [tr('Weiss'), 40, 8], [tr('Kaltweiss'), 210, 10], [tr('Rot'), 0, 100], [tr('Orange'), 25, 100], [tr('Gelb'), 50, 100], [tr('Grün'), 120, 90], [tr('Türkis'), 180, 90], [tr('Blau'), 225, 95], [tr('Violett'), 275, 85], [tr('Pink'), 320, 80]];
 function lightHTML(d) {
   const l = d.cfg.light;
-  return `<p class="sec">Farbe</p><div class="swatches">${SWATCHES.map(([n, h, sat]) => `<button type="button" class="swatch ${l.h === h && l.s === sat ? 'sel' : ''}" data-swatch="${h}|${sat}" style="--c:${hsvCss(h, sat, 100)}" aria-label="${n}" aria-pressed="${l.h === h && l.s === sat}" title="${n}"></button>`).join('')}</div>
-    <div class="ls"><label class="row bright"><span class="tx"><b>Helligkeit</b><span>${l.v} %</span></span><input type="range" min="1" max="100" step="1" value="${l.v}" data-bright="1" aria-label="Helligkeit"></label></div>`;
+  return `<p class="sec">${tr('Farbe')}</p><div class="swatches">${SWATCHES().map(([n, h, sat]) => `<button type="button" class="swatch ${l.h === h && l.s === sat ? 'sel' : ''}" data-swatch="${h}|${sat}" style="--c:${hsvCss(h, sat, 100)}" aria-label="${n}" aria-pressed="${l.h === h && l.s === sat}" title="${n}"></button>`).join('')}</div>
+    <div class="ls"><label class="row bright"><span class="tx"><b>${tr('Helligkeit')}</b><span>${l.v} %</span></span><input type="range" min="1" max="100" step="1" value="${l.v}" data-bright="1" aria-label="${tr('Helligkeit')}"></label></div>`;
 }
 function buttonHTML(d) {
-  const c = d.cfg.button, acts = BTN.filter(([k]) => k !== 'touch' || d.touch);
-  return HD(esc(d.name), 'home', `<button type="button" class="ic" data-go="dev/${d.mac}/settings" aria-label="Einstellungen">${I.gear}</button>`, esc(d.cfg.room))
-    + `<div class="hero">${devIcon(d)}<b>${d.battery != null ? `Batterie ${d.battery} %${d.charge ? ' · lädt' : ''}` : 'Batterie –'}</b><span class="dim">${esc(d.status)}</span></div>
-    <p class="sec">Was der Taster macht</p><div class="ls">${acts.map(([k, l]) => row(l, chev(esc(btnText(c[k]))), '', `data-go="dev/${d.mac}/btn/${k}"`)).join('')}</div>
-    ${d.synced ? '' : '<p class="note">Änderungen kommen beim nächsten Drücken auf den Taster (er schläft, um Batterie zu sparen). Am USB-Kabel klappt es sofort.</p>'}`;
+  const c = d.cfg.button, acts = BTN().filter(([k]) => k !== 'touch' || d.touch);
+  return HD(esc(d.name), 'home', `<button type="button" class="ic" data-go="dev/${d.mac}/settings" aria-label="${tr('Einstellungen')}">${I.gear}</button>`, esc(roomLabel(d.cfg.room)))
+    + `<div class="hero">${devIcon(d)}<b>${d.battery != null ? (d.charge ? tr('Batterie {0} % · lädt', d.battery) : tr('Batterie {0} %', d.battery)) : tr('Batterie –')}</b><span class="dim">${esc(d.status)}</span></div>
+    <p class="sec">${tr('Was der Taster macht')}</p><div class="ls">${acts.map(([k, l]) => row(l, chev(esc(btnText(c[k]))), '', `data-go="dev/${d.mac}/btn/${k}"`)).join('')}</div>
+    ${d.synced ? '' : `<p class="note">${tr('Änderungen kommen beim nächsten Drücken auf den Taster (er schläft, um Batterie zu sparen). Am USB-Kabel klappt es sofort.')}</p>`}`;
 }
 function motionHTML(d) {
   const m = d.cfg.motion, dim = m.on ? 'ls' : 'ls dim';
-  return HD(esc(d.name), 'home', `<button type="button" class="ic" data-go="dev/${d.mac}/settings" aria-label="Einstellungen">${I.gear}</button>`, esc(d.cfg.room))
-    + `<div class="hero ${d.motion ? 'live' : ''}">${devIcon(d)}<b>${!d.online ? 'Offline' : d.motion ? 'Bewegung' : 'Keine Bewegung'}</b><span class="dim">${d.lastMotion && !d.motion ? `zuletzt ${esc(d.status.replace(/^Bewegung /, ''))}` : ''}</span></div>
-    <div class="ls">${row('Helligkeit', val(d.light != null ? `${d.light} lx` : '–'))}${row('Temperatur', chev(d.temp != null ? `${d.temp.toFixed(1)} °C` : '–'), '', `data-go="dev/${d.mac}/temp"`)}</div>
-    <p class="sec">Licht bei Bewegung</p><div class="${dim}">${master(d, 'motion', 'Einschalten bei Bewegung')}
-      <div class="row"><span class="tx"><b>Nur wenn es dunkel ist</b><span>jetzt ${d.light != null ? `${d.light} lx` : '–'}</span></span>${sw('motion.dark', m.dark, 'Nur wenn es dunkel ist')}</div>
-      ${m.dark ? srow('Dunkel unter', stepper('motion.lux', 'lux', m.lux, 'Dunkel unter')) : ''}
-      ${srow('Aus nach', stepper('motion.mins', 'dur240', m.mins, 'Aus nach'), 'ohne Bewegung')}</div>
-    <p class="sec">Diese Geräte</p><div class="chips">${SW().map((t) => `<button type="button" class="chip" data-mtarget="${t.mac}" aria-pressed="${m.targets.includes(t.mac)}">${esc(t.name)}</button>`).join('')}</div>
-    <p class="note">Aus geht nur, was der Melder selbst eingeschaltet hat; von Hand Eingeschaltetes bleibt an.</p>`;
+  return HD(esc(d.name), 'home', `<button type="button" class="ic" data-go="dev/${d.mac}/settings" aria-label="${tr('Einstellungen')}">${I.gear}</button>`, esc(roomLabel(d.cfg.room)))
+    + `<div class="hero ${d.motion ? 'live' : ''}">${devIcon(d)}<b>${!d.online ? tr('Offline') : d.motion ? tr('Bewegung') : tr('Keine Bewegung')}</b><span class="dim">${d.lastMotion && !d.motion ? tr('zuletzt {0}', agoText(d.lastMotion)) : ''}</span></div>
+    <div class="ls">${row(tr('Helligkeit'), val(d.light != null ? `${d.light} lx` : '–'))}${row(tr('Temperatur'), chev(d.temp != null ? `${d.temp.toFixed(1)} °C` : '–'), '', `data-go="dev/${d.mac}/temp"`)}</div>
+    <p class="sec">${tr('Licht bei Bewegung')}</p><div class="${dim}">${master(d, 'motion', tr('Einschalten bei Bewegung'))}
+      <div class="row"><span class="tx"><b>${tr('Nur wenn es dunkel ist')}</b><span>${tr('jetzt {0}', d.light != null ? `${d.light} lx` : '–')}</span></span>${sw('motion.dark', m.dark, tr('Nur wenn es dunkel ist'))}</div>
+      ${m.dark ? srow(tr('Dunkel unter'), stepper('motion.lux', 'lux', m.lux, tr('Dunkel unter'))) : ''}
+      ${srow(tr('Aus nach'), stepper('motion.mins', 'dur240', m.mins, tr('Aus nach')), tr('ohne Bewegung'))}</div>
+    <p class="sec">${tr('Diese Geräte')}</p><div class="chips">${SW().map((t) => `<button type="button" class="chip" data-mtarget="${t.mac}" aria-pressed="${m.targets.includes(t.mac)}">${esc(t.name)}</button>`).join('')}</div>
+    <p class="note">${tr('Aus geht nur, was der Melder selbst eingeschaltet hat; von Hand Eingeschaltetes bleibt an.')}</p>`;
 }
 function deviceHTML(d) {
   if (d.kind === 'button') return buttonHTML(d);
   if (d.kind === 'motion') return motionHTML(d);
-  return HD(esc(d.name), 'home', `<button type="button" class="ic" data-go="dev/${d.mac}/settings" aria-label="Einstellungen">${I.gear}</button>`, esc(d.cfg.room))
+  return HD(esc(d.name), 'home', `<button type="button" class="ic" data-go="dev/${d.mac}/settings" aria-label="${tr('Einstellungen')}">${I.gear}</button>`, esc(roomLabel(d.cfg.room)))
     + `<div class="grid">
-      <button type="button" class="tile devtgl ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-devtoggle="${d.mac}" role="switch" aria-checked="${d.relay}" aria-label="${esc(d.name)} ${d.relay ? 'ausschalten' : 'einschalten'}">
-        <span class="ico"${bulbTint(d)}>${d.kind === 'bulb' ? devIcon(d) : sockIcon(d)}</span><span class="lb">${!d.online ? 'Offline' : d.relay ? pw(d.w) : 'Aus'}</span></button>
-      ${FEAT.filter(([k]) => d.kind === 'switch' || k !== 'temp').map(([k, ic, l], i) => (d.kind === 'bulb' && i === 1 ? `</div>${lightHTML(d)}<div class="grid">` : '') + (() => { const [on, txt] = featInfo(d, k); return `<button type="button" class="tile feat ${on ? 'act' : ''}" data-go="dev/${d.mac}/${k}"><span class="ico">${I[ic]}</span><span class="lb">${l}</span><span class="sub">${on || k === 'eval' ? esc(txt) : 'aus'}</span></button>`; })()).join('')}
+      <button type="button" class="tile devtgl ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-devtoggle="${d.mac}" role="switch" aria-checked="${d.relay}" aria-label="${d.relay ? tr('{0} ausschalten', esc(d.name)) : tr('{0} einschalten', esc(d.name))}">
+        <span class="ico"${bulbTint(d)}>${d.kind === 'bulb' ? devIcon(d) : sockIcon(d)}</span><span class="lb">${!d.online ? tr('Offline') : d.relay ? pw(d.w) : tr('Aus')}</span></button>
+      ${FEAT().filter(([k]) => d.kind === 'switch' || k !== 'temp').map(([k, ic, l], i) => (d.kind === 'bulb' && i === 1 ? `</div>${lightHTML(d)}<div class="grid">` : '') + (() => { const [on, txt] = featInfo(d, k); return `<button type="button" class="tile feat ${on ? 'act' : ''}" data-go="dev/${d.mac}/${k}"><span class="ico">${I[ic]}</span><span class="lb">${l}</span><span class="sub">${on || k === 'eval' ? esc(txt) : tr('aus')}</span></button>`; })()).join('')}
     </div>`;
 }
 // Power Actions: "if above/below X W for at least Y min, then …"
-const ACT_THEN = [['notify', 'Mitteilung'], ['off', 'Ausschalten'], ['other-on', 'Andere an'], ['other-off', 'Andere aus']];
+const ACT_THEN = () => [['notify', tr('Mitteilung')], ['off', tr('Ausschalten')], ['other-on', tr('Andere an')], ['other-off', tr('Andere aus')]];
 function actText(a) {
-  const t = dev(a.target)?.name || 'andere Steckdose';
-  return `${a.when === 'below' ? 'Unter' : 'Über'} ${a.watts} W${a.mins ? `, ${a.mins} min` : ''} → ${{ notify: 'Mitteilung', off: 'aus', 'other-on': `${t} an`, 'other-off': `${t} aus` }[a.then]}`;
+  const t = dev(a.target)?.name || tr('andere Steckdose');
+  return `${a.when === 'below' ? tr('Unter {0} W', dec(a.watts)) : tr('Über {0} W', dec(a.watts))}${a.mins ? `, ${a.mins} min` : ''} → ${{ notify: tr('Mitteilung'), off: tr('aus'), 'other-on': tr('{0} an', t), 'other-off': tr('{0} aus', t) }[a.then]}`;
 }
 const ACT_TPL = (d) => [
-  ['done', 'Fertig melden', 'z. B. Waschmaschine: unter 3 W, nachdem sie gelaufen ist', { when: 'below', watts: 3, mins: 5, then: 'notify', text: `${d.name} ist fertig` }],
-  ['running', 'Melden, wenn es läuft', 'über 10 W', { when: 'above', watts: 10, mins: 1, then: 'notify', text: `${d.name} läuft` }],
-  ['overload', 'Bei Überlast ausschalten', 'über 1500 W', { when: 'above', watts: 1500, mins: 1, then: 'off', text: '' }],
-  ...(SW().length > 1 ? [['follow', 'Andere Steckdose mitschalten', 'z. B. PC an → Lampe an', { when: 'above', watts: 30, mins: 1, then: 'other-on', target: S.devices.find((x) => x.mac !== d.mac).mac, text: '' }]] : []),
-  ['custom', 'Eigene Power Action', 'Bedingung und Folge selbst wählen', { when: 'above', watts: 50, mins: 5, then: 'notify', text: '' }],
+  ['done', tr('Fertig melden'), tr('z. B. Waschmaschine: unter 3 W, nachdem sie gelaufen ist'), { when: 'below', watts: 3, mins: 5, then: 'notify', text: tr('{0} ist fertig', d.name) }],
+  ['running', tr('Melden, wenn es läuft'), tr('über {0} W', 10), { when: 'above', watts: 10, mins: 1, then: 'notify', text: tr('{0} läuft', d.name) }],
+  ['overload', tr('Bei Überlast ausschalten'), tr('über {0} W', 1500), { when: 'above', watts: 1500, mins: 1, then: 'off', text: '' }],
+  ...(SW().length > 1 ? [['follow', tr('Andere Steckdose mitschalten'), tr('z. B. PC an → Lampe an'), { when: 'above', watts: 30, mins: 1, then: 'other-on', target: S.devices.find((x) => x.mac !== d.mac).mac, text: '' }]] : []),
+  ['custom', tr('Eigene Power Action'), tr('Bedingung und Folge selbst wählen'), { when: 'above', watts: 50, mins: 5, then: 'notify', text: '' }],
 ];
 function actionsHTML(d, id) {
   const head = (t, b) => HD(t, b, '<span></span>', esc(d.name));
   if (!id) {
     const list = d.cfg.actions;
-    return head('Power Actions', `dev/${d.mac}`) + `<p class="intro">Liegt die Leistung lange genug über oder unter einem Wert, passiert etwas: eine Mitteilung, ausschalten oder eine andere Steckdose schalten. Jetzt: ${pw(d.w)}.</p>`
+    return head('Power Actions', `dev/${d.mac}`) + `<p class="intro">${tr('Liegt die Leistung lange genug über oder unter einem Wert, passiert etwas: eine Mitteilung, ausschalten oder eine andere Steckdose schalten. Jetzt: {0}.', pw(d.w))}</p>`
       + (list.length ? `<div class="ls">${list.map((a) => `<div class="row"><button type="button" class="tx" data-go="dev/${d.mac}/actions/${a.id}" style="text-align:left;flex:1"><b>${esc(a.text || actText(a))}</b><span>${esc(actText(a))}</span></button>
-          <button type="button" class="sw" data-atoggle="${a.id}" aria-pressed="${a.on}" aria-label="Power Action ein/aus"></button></div>`).join('')}</div>` : '')
-      + `<p class="sec">Neu</p><div class="ls">${ACT_TPL(d).map(([k, l, sub]) => row(l, chev(), sub, `data-actnew="${k}"`)).join('')}</div>`;
+          <button type="button" class="sw" data-atoggle="${a.id}" aria-pressed="${a.on}" aria-label="${tr('Power Action ein/aus')}"></button></div>`).join('')}</div>` : '')
+      + `<p class="sec">${tr('Neu')}</p><div class="ls">${ACT_TPL(d).map(([k, l, sub]) => row(l, chev(), sub, `data-actnew="${k}"`)).join('')}</div>`;
   }
   const a = d.cfg.actions.find((x) => x.id === id);
-  if (!a) return head('Power Action', `dev/${d.mac}/actions`) + '<p class="empty-state">Diese Power Action gibt es nicht mehr.</p>';
+  if (!a) return head('Power Action', `dev/${d.mac}/actions`) + `<p class="empty-state">${tr('Diese Power Action gibt es nicht mehr.')}</p>`;
   const chips = (field, opts) => `<div class="chips">${opts.map(([v, l]) => `<button type="button" class="chip" data-aset="${field}|${v}" aria-pressed="${String(a[field]) === String(v)}">${esc(l)}</button>`).join('')}</div>`;
   const others = SW().filter((x) => x.mac !== d.mac);
-  return head('Power Action', `dev/${d.mac}/actions`) + `<div class="${a.on ? 'ls' : 'ls dim'}"><div class="row master"><span class="tx"><b>Aktiv</b></span><button type="button" class="sw" data-atoggle="${a.id}" aria-pressed="${a.on}" aria-label="Aktiv"></button></div></div>
-    <p class="sec">Wenn die Leistung</p>${chips('when', [['above', 'über'], ['below', 'unter']])}
-    <div class="ls">${srow('Schwelle', stepper('a:watts', 'watt', a.watts, 'Schwelle'), `jetzt ${pw(d.w)}`)}
-      ${srow('Mindestens', stepper('a:mins', 'dur0', a.mins, 'Mindestens'), 'am Stück')}</div>
-    <p class="sec">Dann</p>${chips('then', others.length ? ACT_THEN : ACT_THEN.slice(0, 2))}
-    ${a.then.startsWith('other') ? `<p class="sec">Welche Steckdose</p>${chips('target', others.map((x) => [x.mac, x.name]))}` : ''}
-    ${a.then === 'notify' ? `<div class="ls">${lrow('Text', `<input type="text" data-ain="text" value="${esc(a.text)}" placeholder="${esc(d.name)} ist fertig" maxlength="60" style="max-width:200px">`)}</div>` : ''}
-    <p class="note">${a.when === 'below' ? `Löst aus, wenn ${esc(d.name)} ${a.mins} Minuten lang unter ${a.watts} W zieht, aber erst nachdem es darüber gelaufen ist. Danach erst wieder nach dem nächsten Lauf.` : `Löst aus, wenn ${esc(d.name)} ${a.mins} Minuten lang über ${a.watts} W zieht. Erst wieder, nachdem es zwischendurch darunter war.`}</p>
-    <button type="button" class="btn danger" data-adel="${a.id}">Power Action löschen</button>`;
+  return head('Power Action', `dev/${d.mac}/actions`) + `<div class="${a.on ? 'ls' : 'ls dim'}"><div class="row master"><span class="tx"><b>${tr('Aktiv')}</b></span><button type="button" class="sw" data-atoggle="${a.id}" aria-pressed="${a.on}" aria-label="${tr('Aktiv')}"></button></div></div>
+    <p class="sec">${tr('Wenn die Leistung')}</p>${chips('when', [['above', tr('über')], ['below', tr('unter')]])}
+    <div class="ls">${srow(tr('Schwelle'), stepper('a:watts', 'watt', a.watts, tr('Schwelle')), tr('jetzt {0}', pw(d.w)))}
+      ${srow(tr('Mindestens'), stepper('a:mins', 'dur0', a.mins, tr('Mindestens')), tr('am Stück'))}</div>
+    <p class="sec">${tr('Dann')}</p>${chips('then', others.length ? ACT_THEN() : ACT_THEN().slice(0, 2))}
+    ${a.then.startsWith('other') ? `<p class="sec">${tr('Welche Steckdose')}</p>${chips('target', others.map((x) => [x.mac, x.name]))}` : ''}
+    ${a.then === 'notify' ? `<div class="ls">${lrow(tr('Text'), `<input type="text" data-ain="text" value="${esc(a.text)}" placeholder="${tr('{0} ist fertig', esc(d.name))}" maxlength="60" style="max-width:200px">`)}</div>` : ''}
+    <p class="note">${a.when === 'below' ? tr('Löst aus, wenn {0} {1} Minuten lang unter {2} W zieht, aber erst nachdem es darüber gelaufen ist. Danach erst wieder nach dem nächsten Lauf.', esc(d.name), a.mins, dec(a.watts)) : tr('Löst aus, wenn {0} {1} Minuten lang über {2} W zieht. Erst wieder, nachdem es zwischendurch darunter war.', esc(d.name), a.mins, dec(a.watts))}</p>
+    <button type="button" class="btn danger" data-adel="${a.id}">${tr('Power Action löschen')}</button>`;
 }
 // Bulb: show color/brightness immediately, then send (turns it on)
 async function setLight(mac, l) {
@@ -499,104 +517,105 @@ const updSch = (mac, fn) => saveCfg(mac, { schedule: { entries: dev(mac).cfg.sch
 const updAct = (mac, id, patch) => saveCfg(mac, { actions: dev(mac).cfg.actions.map((a) => (a.id === id ? { ...a, ...patch } : a)) });
 function featureHTML(d, k, sub) {
   const c = d.cfg, back = k === 'tech' || k === 'room' || k === 'icon' ? `dev/${d.mac}/settings` : `dev/${d.mac}`; // roomnew has its own Back
-  const head = HD(FTITLE[k], back, '<span></span>', esc(d.name));
+  const head = HD(FTITLE()[k], back, '<span></span>', esc(d.name));
   const dim = (on) => (on ? 'ls' : 'ls dim');
   switch (k) {
     case 'btn': {
       // a button action: what happens, which device or scene; try it out without pressing
-      const a = c.button[sub] || c.button.single, l = BTN.find(([x]) => x === sub)?.[1] || '';
+      const a = c.button[sub] || c.button.single, l = BTN().find(([x]) => x === sub)?.[1] || '';
       const chip = (v, t) => `<button type="button" class="chip" data-btndo="${sub}|${v}" aria-pressed="${a.do === v}">${t}</button>`;
-      return HD(l, `dev/${d.mac}`, '<span></span>', esc(d.name)) + `<p class="sec">Was passiert</p>
-        <div class="chips">${chip('none', 'Nichts')}${chip('toggle', 'Umschalten')}${chip('on', 'Einschalten')}${chip('off', 'Ausschalten')}${chip('scene', 'Szene')}</div>
-        ${['toggle', 'on', 'off'].includes(a.do) ? `<p class="sec">Gerät</p><div class="chips">${SW().map((t) => `<button type="button" class="chip" data-btnmac="${sub}|${t.mac}" aria-pressed="${a.mac === t.mac}">${esc(t.name)}</button>`).join('')}</div>` : ''}
-        ${a.do === 'scene' ? `<p class="sec">Szene</p><div class="chips">${S.scenes.map((x) => `<button type="button" class="chip" data-btnscene="${sub}|${x.id}" aria-pressed="${a.scene === x.id}">${esc(x.name)}</button>`).join('')}</div>` : ''}
-        ${a.do !== 'none' ? `<button type="button" class="btn grey" data-btntest="${sub}">Jetzt ausprobieren</button>` : ''}`;
+      return HD(l, `dev/${d.mac}`, '<span></span>', esc(d.name)) + `<p class="sec">${tr('Was passiert')}</p>
+        <div class="chips">${chip('none', tr('Nichts'))}${chip('toggle', tr('Umschalten'))}${chip('on', tr('Einschalten'))}${chip('off', tr('Ausschalten'))}${chip('scene', tr('Szene'))}</div>
+        ${['toggle', 'on', 'off'].includes(a.do) ? `<p class="sec">${tr('Gerät')}</p><div class="chips">${SW().map((t) => `<button type="button" class="chip" data-btnmac="${sub}|${t.mac}" aria-pressed="${a.mac === t.mac}">${esc(t.name)}</button>`).join('')}</div>` : ''}
+        ${a.do === 'scene' ? `<p class="sec">${tr('Szene')}</p><div class="chips">${S.scenes.map((x) => `<button type="button" class="chip" data-btnscene="${sub}|${x.id}" aria-pressed="${a.scene === x.id}">${esc(x.name)}</button>`).join('')}</div>` : ''}
+        ${a.do !== 'none' ? `<button type="button" class="btn grey" data-btntest="${sub}">${tr('Jetzt ausprobieren')}</button>` : ''}`;
     }
     case 'schedule': {
       // per schedule: on, off, days. Days of another schedule can't be chosen here (each day only once)
-      const s = c.schedule, taken = (id) => s.entries.filter((e) => e.id !== id).flatMap((e) => e.days), free = WD.filter(([n]) => !s.entries.some((e) => e.days.includes(n)));
-      return head + `<p class="intro">Schaltet zu festen Zeiten ein und aus. Für andere Tage mit anderen Zeiten fügst du einen weiteren Zeitplan hinzu.</p>
-      ${s.on && /wartet|aus in/.test(d.status) ? `<p class="note"><b>Jetzt:</b> ${esc(d.status)}</p>` : ''}
+      const s = c.schedule, taken = (id) => s.entries.filter((e) => e.id !== id).flatMap((e) => e.days), free = WD().filter(([n]) => !s.entries.some((e) => e.days.includes(n)));
+      return head + `<p class="intro">${tr('Schaltet zu festen Zeiten ein und aus. Für andere Tage mit anderen Zeiten fügst du einen weiteren Zeitplan hinzu.')}</p>
+      ${s.on && /wartet|aus in|waiting|off in/i.test(d.status) ? `<p class="note"><b>${tr('Jetzt:')}</b> ${esc(d.status)}</p>` : ''}
       <div class="${dim(s.on)}">${master(d, 'schedule')}</div>
-      ${s.entries.map((e, i) => `<div class="schd-hd"><p class="sec">${s.entries.length > 1 ? `Zeitplan ${i + 1} · ` : ''}${daysText(e.days)}</p>${s.entries.length > 1 ? `<button type="button" class="tlink" data-schdel="${e.id}">Entfernen</button>` : ''}</div>
-        <div class="${dim(s.on)}">${lrow('Ein um', `<input type="time" data-schin="${e.id}|start" value="${e.start}">`)}${lrow(e.idle ? 'Aus ab' : 'Aus um', `<input type="time" data-schin="${e.id}|end" value="${e.end}">`)}
-          <div class="row"><span class="tx"><b>Erst aus, wenn nicht mehr benutzt</b><span>wartet, solange du noch dran arbeitest</span></span><button type="button" class="sw" data-schsw="${e.id}" aria-pressed="${e.idle}" aria-label="Erst aus, wenn nicht mehr benutzt"></button></div>
-          ${e.idle ? `${srow('Unter', stepper(`sch:${e.id}:below`, 'watt1', e.below, 'Unter'), 'jetzt ' + pw(d.w))}${srow('So lange', stepper(`sch:${e.id}:mins`, 'dur240', e.mins, 'So lange'), 'am Stück')}` : ''}</div>
-        <div class="chips days">${WD.filter(([n]) => !taken(e.id).includes(n)).map(([n, l]) => `<button type="button" class="chip" data-schday="${e.id}|${n}" aria-pressed="${e.days.includes(n)}">${l}</button>`).join('')}</div>`).join('')}
-      ${free.length ? `<button type="button" class="btn ghost" data-schadd="1">＋ Zeitplan hinzufügen</button>` : ''}`;
+      ${s.entries.map((e, i) => `<div class="schd-hd"><p class="sec">${s.entries.length > 1 ? `${tr('Zeitplan {0}', i + 1)} · ` : ''}${daysText(e.days)}</p>${s.entries.length > 1 ? `<button type="button" class="tlink" data-schdel="${e.id}">${tr('Entfernen')}</button>` : ''}</div>
+        <div class="${dim(s.on)}">${lrow(tr('Ein um'), `<input type="time" data-schin="${e.id}|start" value="${e.start}">`)}${lrow(e.idle ? tr('Aus ab') : tr('Aus um'), `<input type="time" data-schin="${e.id}|end" value="${e.end}">`)}
+          <div class="row"><span class="tx"><b>${tr('Erst aus, wenn nicht mehr benutzt')}</b><span>${tr('wartet, solange du noch dran arbeitest')}</span></span><button type="button" class="sw" data-schsw="${e.id}" aria-pressed="${e.idle}" aria-label="${tr('Erst aus, wenn nicht mehr benutzt')}"></button></div>
+          ${e.idle ? `${srow(tr('Unter'), stepper(`sch:${e.id}:below`, 'watt1', e.below, tr('Unter')), tr('jetzt {0}', pw(d.w)))}${srow(tr('So lange'), stepper(`sch:${e.id}:mins`, 'dur240', e.mins, tr('So lange')), tr('am Stück'))}` : ''}</div>
+        <div class="chips days">${WD().filter(([n]) => !taken(e.id).includes(n)).map(([n, l]) => `<button type="button" class="chip" data-schday="${e.id}|${n}" aria-pressed="${e.days.includes(n)}">${l}</button>`).join('')}</div>`).join('')}
+      ${free.length ? `<button type="button" class="btn ghost" data-schadd="1">＋ ${tr('Zeitplan hinzufügen')}</button>` : ''}`;
     }
     case 'vacation': {
-      const v = c.vacation, todayTxt = d.vacationToday.map((s) => `${s.key} ${s.start}–${s.end}`).join(', ');
-      return head + `<p class="intro">Damit das Haus bewohnt wirkt, geht ${esc(d.name)} in den Ferien morgens und abends an und wieder aus, jeden Tag zu einer anderen Zeit.</p>
-      <div class="${dim(v.on)}">${master(d, 'vacation', 'Ferienmodus')}${lrow('Von', inp('vacation.from', 'date', v.from))}${lrow('Bis', inp('vacation.to', 'date', v.to))}</div>
-      <p class="sec">Morgens</p><div class="${dim(v.on && v.morning.on)}"><div class="row master"><span class="tx"><b>Morgens an</b><span>20–60 Minuten</span></span>${sw('vacation.morning.on', v.morning.on, 'Morgens an')}</div>
-        ${lrow('Frühestens', inp('vacation.morning.from', 'time', v.morning.from))}${lrow('Spätestens', inp('vacation.morning.to', 'time', v.morning.to))}</div>
-      <p class="sec">Abends</p><div class="${dim(v.on && v.evening.on)}"><div class="row master"><span class="tx"><b>Abends an</b><span>1–3 Stunden</span></span>${sw('vacation.evening.on', v.evening.on, 'Abends an')}</div>
-        ${lrow('Frühestens', inp('vacation.evening.from', 'time', v.evening.from))}${lrow('Spätestens', inp('vacation.evening.to', 'time', v.evening.to))}</div>
-      ${v.on ? `<p class="note">${todayTxt ? `<b>Heute:</b> ${esc(todayTxt)}` : `Beginnt am ${dShort(v.from)}.`}</p>` : ''}`;
+      const v = c.vacation, todayTxt = d.vacationToday.map((s) => `${slotName(s.key)} ${s.start}–${s.end}`).join(', ');
+      return head + `<p class="intro">${tr('Damit das Haus bewohnt wirkt, geht {0} in den Ferien morgens und abends an und wieder aus, jeden Tag zu einer anderen Zeit.', esc(d.name))}</p>
+      <div class="${dim(v.on)}">${master(d, 'vacation', tr('Ferienmodus'))}${lrow(tr('Von'), inp('vacation.from', 'date', v.from))}${lrow(tr('Bis'), inp('vacation.to', 'date', v.to))}</div>
+      <p class="sec">${tr('Morgens')}</p><div class="${dim(v.on && v.morning.on)}"><div class="row master"><span class="tx"><b>${tr('Morgens an')}</b><span>${tr('20–60 Minuten')}</span></span>${sw('vacation.morning.on', v.morning.on, tr('Morgens an'))}</div>
+        ${lrow(tr('Frühestens'), inp('vacation.morning.from', 'time', v.morning.from))}${lrow(tr('Spätestens'), inp('vacation.morning.to', 'time', v.morning.to))}</div>
+      <p class="sec">${tr('Abends')}</p><div class="${dim(v.on && v.evening.on)}"><div class="row master"><span class="tx"><b>${tr('Abends an')}</b><span>${tr('1–3 Stunden')}</span></span>${sw('vacation.evening.on', v.evening.on, tr('Abends an'))}</div>
+        ${lrow(tr('Frühestens'), inp('vacation.evening.from', 'time', v.evening.from))}${lrow(tr('Spätestens'), inp('vacation.evening.to', 'time', v.evening.to))}</div>
+      ${v.on ? `<p class="note">${todayTxt ? `<b>${tr('Heute:')}</b> ${esc(todayTxt)}` : tr('Beginnt am {0}.', dShort(v.from))}</p>` : ''}`;
     }
-    case 'sun': return head + `<p class="intro">Heute bei dir: Sonnenaufgang ${S.sun?.rise || '–'}, Sonnenuntergang ${S.sun?.set || '–'}${S.settings.place ? ` (${esc(S.settings.place)})` : ''}.</p>
-      <div class="${dim(c.sun.on)}"><div class="row master"><span class="tx"><b>Bei Sonnenuntergang an</b></span>${sw('sun.on', c.sun.on, 'Bei Sonnenuntergang an')}</div>
-        ${srow('Verschieben', stepper('sun.onOffset', 'offs', c.sun.onOffset, 'Einschalten verschieben'), '− früher, + später')}</div>
-      <div class="${dim(c.sun.off)}"><div class="row master"><span class="tx"><b>Bei Sonnenaufgang aus</b></span>${sw('sun.off', c.sun.off, 'Bei Sonnenaufgang aus')}</div>
-        ${srow('Verschieben', stepper('sun.offOffset', 'offs', c.sun.offOffset, 'Ausschalten verschieben'), '− früher, + später')}</div>`;
-    case 'timer': return head + `<p class="intro">Nach jedem Einschalten bleibt ${esc(d.name)} so lange an und geht dann von selbst aus, egal ob in der App oder am Gerät eingeschaltet.</p>
+    case 'sun': return head + `<p class="intro">${tr('Heute bei dir: Sonnenaufgang {0}, Sonnenuntergang {1}{2}.', S.sun?.rise || '–', S.sun?.set || '–', S.settings.place ? ` (${esc(S.settings.place)})` : '')}</p>
+      <div class="${dim(c.sun.on)}"><div class="row master"><span class="tx"><b>${tr('Bei Sonnenuntergang an')}</b></span>${sw('sun.on', c.sun.on, tr('Bei Sonnenuntergang an'))}</div>
+        ${srow(tr('Verschieben'), stepper('sun.onOffset', 'offs', c.sun.onOffset, tr('Einschalten verschieben')), tr('− früher, + später'))}</div>
+      <div class="${dim(c.sun.off)}"><div class="row master"><span class="tx"><b>${tr('Bei Sonnenaufgang aus')}</b></span>${sw('sun.off', c.sun.off, tr('Bei Sonnenaufgang aus'))}</div>
+        ${srow(tr('Verschieben'), stepper('sun.offOffset', 'offs', c.sun.offOffset, tr('Ausschalten verschieben')), tr('− früher, + später'))}</div>`;
+    case 'timer': return head + `<p class="intro">${tr('Nach jedem Einschalten bleibt {0} so lange an und geht dann von selbst aus, egal ob in der App oder am Gerät eingeschaltet.', esc(d.name))}</p>
       <div class="${dim(c.timer.on)}">${master(d, 'timer')}</div>
       <div class="chips">${[15, 30, 60, 120, 240].map((m) => `<button type="button" class="chip" data-set="timer.mins" data-v="${m}" aria-pressed="${c.timer.mins === m}">${m < 60 ? `${m} min` : `${m / 60} h`}</button>`).join('')}</div>
-      <div class="ls">${srow('Eigene Dauer', stepper('timer.mins', 'dur', c.timer.mins, 'Eigene Dauer'))}</div>`;
+      <div class="ls">${srow(tr('Eigene Dauer'), stepper('timer.mins', 'dur', c.timer.mins, tr('Eigene Dauer')))}</div>`;
     case 'saver': {
       const s = c.saver;
-      return head + `<p class="intro">Hängt das Gerät nur im Standby, schaltet die Steckdose es ab. Ist sie aus, fliesst kein Strom mehr, darum kann sie nicht selbst merken, wann du das Gerät wieder brauchst. Lege fest, wann es wieder angeht.</p>
-      <div class="${dim(s.on)}">${master(d, 'saver')}${srow('Standby unter', stepper('saver.below', 'watt', s.below, 'Standby unter'), 'jetzt ' + pw(d.w))}
-        ${srow('Länger als', stepper('saver.mins', 'dur', s.mins, 'Länger als'))}</div>
-      <p class="sec">Wieder an</p>
-      <div class="chips">${[['hand', 'Von Hand'], ['time', 'Um eine Uhrzeit'], ['after', 'Nach Stunden']].map(([v, l]) => `<button type="button" class="chip" data-set="saver.back" data-v="${v}" aria-pressed="${s.back === v}">${l}</button>`).join('')}</div>
-      ${s.back === 'time' ? `<div class="ls">${lrow('Um', inp('saver.at', 'time', s.at))}</div>` : s.back === 'after' ? `<div class="ls">${srow('Nach', stepper('saver.hours', 'hours', s.hours, 'Nach'))}</div>` : '<p class="note">Erst wieder an, wenn du sie in der App, mit einer Szene oder am Knopf der Steckdose einschaltest.</p>'}`;
+      return head + `<p class="intro">${tr('Hängt das Gerät nur im Standby, schaltet die Steckdose es ab. Ist sie aus, fliesst kein Strom mehr, darum kann sie nicht selbst merken, wann du das Gerät wieder brauchst. Lege fest, wann es wieder angeht.')}</p>
+      <div class="${dim(s.on)}">${master(d, 'saver')}${srow(tr('Standby unter'), stepper('saver.below', 'watt', s.below, tr('Standby unter')), tr('jetzt {0}', pw(d.w)))}
+        ${srow(tr('Länger als'), stepper('saver.mins', 'dur', s.mins, tr('Länger als')))}</div>
+      <p class="sec">${tr('Wieder an')}</p>
+      <div class="chips">${[['hand', tr('Von Hand')], ['time', tr('Um eine Uhrzeit')], ['after', tr('Nach Stunden')]].map(([v, l]) => `<button type="button" class="chip" data-set="saver.back" data-v="${v}" aria-pressed="${s.back === v}">${l}</button>`).join('')}</div>
+      ${s.back === 'time' ? `<div class="ls">${lrow(tr('Um'), inp('saver.at', 'time', s.at))}</div>` : s.back === 'after' ? `<div class="ls">${srow(tr('Nach'), stepper('saver.hours', 'hours', s.hours, tr('Nach')))}</div>` : `<p class="note">${tr('Erst wieder an, wenn du sie in der App, mit einer Szene oder am Knopf der Steckdose einschaltest.')}</p>`}`;
     }
     case 'temp': if (d.kind !== 'switch') return head + tempChartHTML(d);
       return head + tempChartHTML(d)
-      + `<p class="sec">Schutz</p><div class="${dim(c.temp.on)}">${master(d, 'temp', 'Bei Hitze ausschalten')}${srow('Aus über', stepper('temp.max', 'temp', c.temp.max, 'Aus über'))}</div>
-      <p class="note">Die Steckdose misst ihre eigene Temperatur, also etwas wärmer als der Raum, wenn viel Strom fliesst. Abgleichen kannst du das unter Einstellungen › Temperatur-Korrektur.</p>`;
-    case 'alarms': return head + `<p class="intro">Mitteilung aufs Handy, wenn bei ${esc(d.name)} etwas passiert. ${S.pushSubs ? '' : '<a href="#alarms">Mitteilungen zuerst erlauben ›</a>'}</p>
-      <div class="ls">${alarmKeys(d).map((key) => [key, ...{ offline: ['Offline', 'keine Antwort seit 3 Minuten'], unusual: ['Ungewöhnlicher Verbrauch', 'deutlich mehr als sonst'], switchedOn: ['Eingeschaltet', 'am Gerät oder von einer Regel'], hot: ['Zu warm', `über ${c.temp.on ? c.temp.max : 45} °C`] }[key]])
+      + `<p class="sec">${tr('Schutz')}</p><div class="${dim(c.temp.on)}">${master(d, 'temp', tr('Bei Hitze ausschalten'))}${srow(tr('Aus über'), stepper('temp.max', 'temp', c.temp.max, tr('Aus über')))}</div>
+      <p class="note">${tr('Die Steckdose misst ihre eigene Temperatur, also etwas wärmer als der Raum, wenn viel Strom fliesst. Abgleichen kannst du das unter Einstellungen › Temperatur-Korrektur.')}</p>`;
+    case 'alarms': return head + `<p class="intro">${tr('Mitteilung aufs Handy, wenn bei {0} etwas passiert.', esc(d.name))} ${S.pushSubs ? '' : `<a href="#alarms">${tr('Mitteilungen zuerst erlauben ›')}</a>`}</p>
+      <div class="ls">${alarmKeys(d).map((key) => [key, ...{ offline: [tr('Offline'), tr('keine Antwort seit 3 Minuten')], unusual: [tr('Ungewöhnlicher Verbrauch'), tr('deutlich mehr als sonst')], switchedOn: [tr('Eingeschaltet'), tr('am Gerät oder von einer Regel')], hot: [tr('Zu warm'), tr('über {0} °C', c.temp.on ? c.temp.max : 45)] }[key]])
         .map(([key, l, sub]) => `<div class="row"><span class="tx"><b>${l}</b><span>${sub}</span></span>${sw(`alarms.${key}`, c.alarms[key], l)}</div>`).join('')}</div>`;
     case 'eval': return head + chartHTML(d.mac, false) + totalsHTML(d.mac);
     case 'actions': return actionsHTML(d, sub);
-    case 'settings': return HD('Einstellungen', `dev/${d.mac}`) + `<div class="hero">${devIcon(d)}<b>${esc(d.name)}</b></div>
-      <div class="ls">${lrow('Name', `<input type="text" data-in="name" value="${esc(d.cfg.name)}" placeholder="${esc(d.name)}" maxlength="40">`)}
-        ${row('Raum', chev(esc(d.cfg.room || 'keiner')), '', `data-go="dev/${d.mac}/room"`)}
-        ${row('Symbol', chev(esc(iconName(d))), '', `data-go="dev/${d.mac}/icon"`)}
-        ${d.kind === 'switch' || d.kind === 'motion' ? srow('Temperatur-Korrektur', stepper('tcorr', 'tcorr', c.tcorr, 'Temperatur-Korrektur'), 'wird zur Messung addiert') : ''}
-        ${row('Technische Details', chev(), '', `data-go="dev/${d.mac}/tech"`)}</div>
-      ${canSwitch(d) ? `<div class="ls"><div class="row"><span class="tx"><b>Tastensperre</b><span>in der App nicht mehr schaltbar</span></span>${sw('lock', c.lock, 'Tastensperre')}</div></div>` : ''}
-      <button type="button" class="btn danger" data-remove="${d.mac}">${d.kind === 'switch' ? 'Steckdose' : 'Gerät'} entfernen</button>`;
+    case 'settings': return HD(tr('Einstellungen'), `dev/${d.mac}`) + `<div class="hero">${devIcon(d)}<b>${esc(d.name)}</b></div>
+      <div class="ls">${lrow(tr('Name'), `<input type="text" data-in="name" value="${esc(d.cfg.name)}" placeholder="${esc(d.name)}" maxlength="40">`)}
+        ${row(tr('Raum'), chev(esc(d.cfg.room ? roomLabel(d.cfg.room) : tr('keiner'))), '', `data-go="dev/${d.mac}/room"`)}
+        ${row(tr('Symbol'), chev(esc(iconName(d))), '', `data-go="dev/${d.mac}/icon"`)}
+        ${d.kind === 'switch' || d.kind === 'motion' ? srow(tr('Temperatur-Korrektur'), stepper('tcorr', 'tcorr', c.tcorr, tr('Temperatur-Korrektur')), tr('wird zur Messung addiert')) : ''}
+        ${row(tr('Technische Details'), chev(), '', `data-go="dev/${d.mac}/tech"`)}</div>
+      ${canSwitch(d) ? `<div class="ls"><div class="row"><span class="tx"><b>${tr('Tastensperre')}</b><span>${tr('in der App nicht mehr schaltbar')}</span></span>${sw('lock', c.lock, tr('Tastensperre'))}</div></div>` : ''}
+      <button type="button" class="btn danger" data-remove="${d.mac}">${d.kind === 'switch' ? tr('Steckdose entfernen') : tr('Gerät entfernen')}</button>`;
     case 'room': {
       // like "Select Room" in myStrom: used rooms first, then presets with "New"; the selected one dimmed with a checkmark
-      const used = [...new Set(S.devices.map((x) => x.cfg.room).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));
+      const byLabel = (a, b) => roomLabel(a).localeCompare(roomLabel(b), LOC());
+      const used = [...new Set(S.devices.map((x) => x.cfg.room).filter(Boolean))].sort(byLabel);
       const tileR = (r, icon, label, isNew) => `<button type="button" class="tile room ${c.room === r ? 'sel' : ''}" data-room="${esc(r)}" aria-pressed="${c.room === r}">
         <span class="ico">${icon}${c.room === r ? '<span class="chk" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 12 4 4 8-8"/></svg></span>' : ''}</span>
-        <span class="lb">${esc(label)}</span>${isNew ? '<span class="new" aria-hidden="true"><i>Neu</i></span>' : ''}</button>`;
-      return HD('Raum wählen', back) + `<div class="grid">
-        ${used.map((r) => tileR(r, roomIcon(r), r, false)).join('')}
-        ${ROOMS.filter(([r]) => !used.includes(r)).map(([r, ic]) => tileR(r, ROOM_ICON[ic], r, true)).join('')}
-        <button type="button" class="tile room" data-go="dev/${d.mac}/roomnew"><span class="ico">${ROOM_ICON.plus}</span><span class="lb">Eigener Raum</span></button>
-        ${tileR('', ROOM_ICON.none, 'Kein Raum', false)}
+        <span class="lb">${esc(label)}</span>${isNew ? `<span class="new" aria-hidden="true"><i>${tr('Neu')}</i></span>` : ''}</button>`;
+      return HD(tr('Raum wählen'), back) + `<div class="grid">
+        ${used.map((r) => tileR(r, roomIcon(r), roomLabel(r), false)).join('')}
+        ${ROOMS.filter(([r]) => !used.includes(r)).sort(([a], [b]) => byLabel(a, b)).map(([r, ic]) => tileR(r, ROOM_ICON[ic], roomLabel(r), true)).join('')}
+        <button type="button" class="tile room" data-go="dev/${d.mac}/roomnew"><span class="ico">${ROOM_ICON.plus}</span><span class="lb">${tr('Eigener Raum')}</span></button>
+        ${tileR('', ROOM_ICON.none, tr('Kein Raum'), false)}
       </div>`;
     }
     case 'icon': {
       // like the room picker: tiles, selected one dimmed with a checkmark; tapping selects and goes back
       const curKey = iconKey(d);
-      return HD('Symbol wählen', back) + `<div class="grid">${DEV_ICONS.map(([k, l, svg]) => `<button type="button" class="tile room ${curKey === k ? 'sel' : ''}" data-icon="${k}" aria-pressed="${curKey === k}">
+      return HD(tr('Symbol wählen'), back) + `<div class="grid">${DEV_ICONS.map(([k, l, svg]) => `<button type="button" class="tile room ${curKey === k ? 'sel' : ''}" data-icon="${k}" aria-pressed="${curKey === k}">
         <span class="ico">${svg || I.plug}${curKey === k ? '<span class="chk" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 12 4 4 8-8"/></svg></span>' : ''}</span>
-        <span class="lb">${l}</span></button>`).join('')}</div>`;
+        <span class="lb">${l()}</span></button>`).join('')}</div>`;
     }
-    case 'roomnew': return HD('Eigener Raum', `dev/${d.mac}/room`) + `<p class="intro">Wie soll der Raum heissen?</p>
-      <div class="ls">${lrow('Name', '<input type="text" data-roomnew="1" placeholder="z. B. Werkstatt" maxlength="40" enterkeyhint="done" autocomplete="off" style="background:#2a2a2a;color:var(--fg);padding:7px 9px;text-align:left;max-width:200px">')}</div>
-      <button type="button" class="btn" data-roomadd="1">Hinzufügen</button>`;
-    case 'tech': return head + `<div class="ls">${[['Typ', d.typeName], ['Firmware', d.fw || '–'], ['IP-Adresse', d.ip], ['MAC', d.mac.match(/../g).join(':')], ['Verbindung', d.online ? 'erreichbar' : 'offline'],
-      ['Temperatur gemessen', d.tempRaw != null ? `${d.tempRaw.toFixed(1)} °C` : '–']].map(([l, v]) => row(l, val(esc(v)))).join('')}</div>
-      <p class="sec">Im Gerät gespeichert</p><div class="ls" data-diag="${d.mac}" data-keep="${d.mac}">${row('Lädt …', '')}</div>
-      <p class="sec">Schnittstellen der Firmware</p><pre class="diag" data-diaghelp="${d.mac}" data-keep="${d.mac}"></pre>`;
+    case 'roomnew': return HD(tr('Eigener Raum'), `dev/${d.mac}/room`) + `<p class="intro">${tr('Wie soll der Raum heissen?')}</p>
+      <div class="ls">${lrow(tr('Name'), `<input type="text" data-roomnew="1" placeholder="${tr('z. B. Werkstatt')}" maxlength="40" enterkeyhint="done" autocomplete="off" style="background:#2a2a2a;color:var(--fg);padding:7px 9px;text-align:left;max-width:200px">`)}</div>
+      <button type="button" class="btn" data-roomadd="1">${tr('Hinzufügen')}</button>`;
+    case 'tech': return head + `<div class="ls">${[[tr('Typ'), d.typeName], [tr('Firmware'), d.fw || '–'], [tr('IP-Adresse'), d.ip], ['MAC', d.mac.match(/../g).join(':')], [tr('Verbindung'), d.online ? tr('erreichbar') : tr('offline')],
+      [tr('Temperatur gemessen'), d.tempRaw != null ? `${d.tempRaw.toFixed(1)} °C` : '–']].map(([l, v]) => row(l, val(esc(v)))).join('')}</div>
+      <p class="sec">${tr('Im Gerät gespeichert')}</p><div class="ls" data-diag="${d.mac}" data-keep="${d.mac}">${row(tr('Lädt …'), '')}</div>
+      <p class="sec">${tr('Schnittstellen der Firmware')}</p><pre class="diag" data-diaghelp="${d.mac}" data-keep="${d.mac}"></pre>`;
     default: return '';
   }
 }
@@ -605,9 +624,9 @@ function featureHTML(d, k, sub) {
 const view = { mac: 'all', day: null, period: 'day' };
 // view.mac: 'all', one device or several comma-separated
 const pickedMacs = (m) => (m === 'all' ? SW().map((d) => d.mac) : m.split(',').filter((x) => dev(x)));
-const pickedName = (m) => { if (m === 'all') return 'Alle Geräte'; const n = pickedMacs(m).map((x) => dev(x).name); return n.length > 2 ? `${n.length} Geräte` : n.join(' + '); };
-const PERIODS = [['day', 'Tag'], ['week', 'Woche'], ['month', 'Monat'], ['year', 'Jahr']];
-const MONTHS_LONG = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+const pickedName = (m) => { if (m === 'all') return tr('Alle Geräte'); const n = pickedMacs(m).map((x) => dev(x).name); return n.length > 2 ? nDev(n.length) : n.join(' + '); };
+const PERIODS = () => [['day', tr('Tag')], ['week', tr('Woche')], ['month', tr('Monat')], ['year', tr('Jahr')]];
+const MONTHS_LONG = () => [tr('Januar'), tr('Februar'), tr('März'), tr('April'), tr('Mai'), tr('Juni'), tr('Juli'), tr('August'), tr('September'), tr('Oktober'), tr('November'), tr('Dezember')];
 function periodStart(p, day) {
   if (p === 'week') return addDays(day, -((new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7));
   if (p === 'month') return `${day.slice(0, 7)}-01`;
@@ -622,8 +641,11 @@ function shiftPeriod(p, day, n) {
 }
 function periodLabel(p, day) {
   if (p === 'day') return dayLabel(day);
-  if (p === 'week') { const a = periodStart('week', day), b = addDays(a, 6), mon = (x) => MONTHS[Number(x.slice(5, 7)) - 1]; return `${Number(a.slice(8))}.${a.slice(5, 7) !== b.slice(5, 7) ? ` ${mon(a)}` : ''} – ${Number(b.slice(8))}. ${mon(b)}`; }
-  if (p === 'month') return `${MONTHS_LONG[Number(day.slice(5, 7)) - 1]} ${day.slice(0, 4)}`;
+  if (p === 'week') {
+    const a = periodStart('week', day), b = addDays(a, 6), mon = (x) => MONTHS()[Number(x.slice(5, 7)) - 1];
+    return a.slice(5, 7) !== b.slice(5, 7) ? tr('{0}. {1} – {2}. {3}', Number(a.slice(8)), mon(a), Number(b.slice(8)), mon(b)) : tr('{0}. – {1}. {2}', Number(a.slice(8)), Number(b.slice(8)), mon(b));
+  }
+  if (p === 'month') return `${MONTHS_LONG()[Number(day.slice(5, 7)) - 1]} ${day.slice(0, 4)}`;
   return day.slice(0, 4);
 }
 const bars = new Map();
@@ -642,7 +664,7 @@ function barSVG(b) {
   const curKey = b.period === 'year' ? S.today.slice(0, 7) : S.today;
   const show = (i) => b.period !== 'month' || i === 0 || (i + 1) % 5 === 0;
   const fmt = (g) => (g < 1 ? g.toFixed(step < 0.1 ? 2 : 1) : String(Math.round(g * 10) / 10));
-  return `<svg viewBox="0 0 320 214" role="img" aria-label="Verbrauch je ${b.period === 'year' ? 'Monat' : 'Tag'}">
+  return `<svg viewBox="0 0 320 214" role="img" aria-label="${b.period === 'year' ? tr('Verbrauch je Monat') : tr('Verbrauch je Tag')}">
     ${Array.from({ length: Math.round(top / step) + 1 }, (_, k) => k * step).map((g) => `<line x1="${W0}" x2="${W1}" y1="${y(g)}" y2="${y(g)}" stroke="#3a3a3a" stroke-width=".6"/><text x="${W0 - 4}" y="${y(g) + 3}" text-anchor="end" font-size="9" fill="#bdbdbd">${fmt(g)}</text>`).join('')}
     <text x="${W0 - 4}" y="7" text-anchor="end" font-size="8" fill="#888">kWh</text>
     ${b.bars.map((x, i) => (x.wh == null ? '' : `<rect x="${(W0 + slot * i + (slot - bw) / 2).toFixed(1)}" y="${y(vals[i]).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, H1 - y(vals[i])).toFixed(1)}" rx="${Math.min(2, bw / 3).toFixed(1)}" fill="${x.key === curKey ? '#5ab400' : '#bdbdbd'}"/>`)).join('')}
@@ -656,7 +678,7 @@ function barTip(el, b) {
     const r = svg.getBoundingClientRect(), vx = (e.clientX - r.left) / r.width * 320, i = Math.floor((vx - 38) / ((316 - 38) / b.bars.length)), x = b.bars[i];
     if (!x || x.wh == null) { hide(); return; }
     if (!tip) { tip = document.createElement('span'); tip.className = 'tip'; el.append(tip); }
-    const label = b.period === 'year' ? `${MONTHS_LONG[i]}` : `${['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][new Date(`${x.key}T12:00:00Z`).getUTCDay()]} ${Number(x.key.slice(8))}.${Number(x.key.slice(5, 7))}.`;
+    const label = b.period === 'year' ? MONTHS_LONG()[i] : tr('{0} {1}.{2}.', [tr('So'), tr('Mo'), tr('Di'), tr('Mi'), tr('Do'), tr('Fr'), tr('Sa')][new Date(`${x.key}T12:00:00Z`).getUTCDay()], Number(x.key.slice(8)), Number(x.key.slice(5, 7)));
     tip.textContent = `${label} · ${kwh(x.wh)} kWh · CHF ${chf(x.wh)}`;
     tip.style.left = `${(38 + (316 - 38) / b.bars.length * (i + 0.5)) / 320 * r.width}px`;
   };
@@ -681,9 +703,9 @@ function areaSVG(c) {
   if (cur.length) segs.push(cur);
   for (const s of segs) if (s.length === 1) s.push([s[0][0] + (W1 - W0) / (n - 1), s[0][1]]);
   const grid = Array.from({ length: Math.round(top / step) + 1 }, (_, k) => k * step);
-  return `<svg viewBox="0 0 320 214" role="img" aria-label="Verlauf ${dayLabel(c.day)}, höchstens ${Math.round(max)} W">
+  return `<svg viewBox="0 0 320 214" role="img" aria-label="${tr('Verlauf {0}, höchstens {1} W', dayLabel(c.day), Math.round(max))}">
     ${grid.map((g) => `<line x1="${W0}" x2="${W1}" y1="${y(g)}" y2="${y(g)}" stroke="#3a3a3a" stroke-width=".6"/><text x="${W0 - 4}" y="${y(g) + 3}" text-anchor="end" font-size="9" fill="#bdbdbd">${g}W</text>`).join('')}
-    ${vals.length ? `<line x1="${W0}" x2="${W1}" y1="${y(max)}" y2="${y(max)}" stroke="#bdbdbd" stroke-dasharray="3 2" stroke-width=".8"/><text x="${W0 + 6}" y="${y(max) - 4}" font-size="9" fill="#bdbdbd">Max. ${Math.round(max)} W</text>` : ''}
+    ${vals.length ? `<line x1="${W0}" x2="${W1}" y1="${y(max)}" y2="${y(max)}" stroke="#bdbdbd" stroke-dasharray="3 2" stroke-width=".8"/><text x="${W0 + 6}" y="${y(max) - 4}" font-size="9" fill="#bdbdbd">${tr('Max. {0} W', Math.round(max))}</text>` : ''}
     ${segs.map((s) => `<path d="M${s[0][0]},${H1} L${s.map((p) => p.join(',')).join(' L')} L${s[s.length - 1][0]},${H1}Z" fill="#bdbdbd"/><path d="M${s.map((p) => p.join(',')).join(' L')}" fill="none" stroke="#efefef" stroke-width="1"/>`).join('')}
     <line x1="${W0}" x2="${W0}" y1="${H0 - 8}" y2="${H1}" stroke="#bdbdbd" stroke-width=".8"/>
     ${['00:00', '06:00', '12:00', '18:00', '24:00'].map((l, k) => `<text x="${W0 + (W1 - W0) * k / 4}" y="${H1 + 16}" text-anchor="${k === 0 ? 'start' : k === 4 ? 'end' : 'middle'}" font-size="9" fill="#bdbdbd">${l}</text>`).join('')}
@@ -697,25 +719,25 @@ function chartHTML(mac, pick) {
   const m = pick ? view.mac : mac;
   const now = pickedMacs(m).reduce((a, x) => a + dev(x).w, 0), [v, u] = pwN(now);
   const p = view.period, ps = periodStart(p, view.day), current = periodStart(p, S.today) === ps, key = `${m}|${p}|${ps}`, live = current ? `|${Math.floor(S.now / 60e3)}` : '';
-  return `<div class="big"><b>${v}<small> ${u}</small></b><span>Verbrauch jetzt</span></div>
-    <div class="periods" role="group" aria-label="Zeitraum">${PERIODS.map(([k, l]) => `<button type="button" data-period="${k}" aria-pressed="${p === k}">${l}</button>`).join('')}</div>
+  return `<div class="big"><b>${v}<small> ${u}</small></b><span>${tr('Verbrauch jetzt')}</span></div>
+    <div class="periods" role="group" aria-label="${tr('Zeitraum')}">${PERIODS().map(([k, l]) => `<button type="button" data-period="${k}" aria-pressed="${p === k}">${l}</button>`).join('')}</div>
     <div class="nav"><button type="button" class="devsel" ${pick ? 'data-devsel="1"' : 'disabled'}>${esc(pickedName(m))}${pick ? ' ▾' : ''}</button>
-      <span class="date">${periodLabel(p, view.day)}</span><button type="button" class="arr" data-dayshift="-1" aria-label="zurück">‹</button><button type="button" class="arr" data-dayshift="1" aria-label="vor" ${shiftPeriod(p, view.day, 1) > S.today ? 'disabled' : ''}>›</button></div>
-    <div class="chart" data-chart="${key}" data-keep="${key}${live}"><div class="empty">Lädt …</div></div>
-    <div class="foot" data-foot data-keep="${key}${live}"><div><b>–<small> kWh</small></b><span>Verbrauch</span></div><i></i><div><b>–<small> CHF</small></b><span>Kosten</span></div></div>`;
+      <span class="date">${periodLabel(p, view.day)}</span><button type="button" class="arr" data-dayshift="-1" aria-label="${tr('zurück')}">‹</button><button type="button" class="arr" data-dayshift="1" aria-label="${tr('vor')}" ${shiftPeriod(p, view.day, 1) > S.today ? 'disabled' : ''}>›</button></div>
+    <div class="chart" data-chart="${key}" data-keep="${key}${live}"><div class="empty">${tr('Lädt …')}</div></div>
+    <div class="foot" data-foot data-keep="${key}${live}"><div><b>–<small> kWh</small></b><span>${tr('Verbrauch')}</span></div><i></i><div><b>–<small> CHF</small></b><span>${tr('Kosten')}</span></div></div>`;
 }
 // ---------- Temperature history ----------
 const tview = { period: 'day', day: null };
-const TPERIODS = [['day', 'Tag'], ['week', 'Woche'], ['month', 'Monat']];
+const TPERIODS = () => [['day', tr('Tag')], ['week', tr('Woche')], ['month', tr('Monat')]];
 const deg = (v) => (v == null ? '–' : v.toFixed(1));
 function tempChartHTML(d) {
   tview.day ||= S.today;
   const p = tview.period, ref = periodStart(p, tview.day), live = periodStart(p, S.today) === ref ? `|${Math.floor(S.now / 300e3)}` : '', key = `${d.mac}|${p}|${ref}`;
-  return `<div class="big"><b>${deg(d.temp)}<small> °C</small></b><span>Temperatur jetzt</span></div>
-    <div class="periods" role="group" aria-label="Zeitraum">${TPERIODS.map(([k, l]) => `<button type="button" data-tperiod="${k}" aria-pressed="${p === k}">${l}</button>`).join('')}</div>
-    <div class="nav"><span class="sp"></span><span class="date">${periodLabel(p, tview.day)}</span><button type="button" class="arr" data-tshift="-1" aria-label="zurück">‹</button><button type="button" class="arr" data-tshift="1" aria-label="vor" ${shiftPeriod(p, tview.day, 1) > S.today ? 'disabled' : ''}>›</button></div>
-    <div class="chart temp" data-tchart="${key}" data-keep="${key}${live}"><div class="empty">Lädt …</div></div>
-    <div class="foot three" data-tfoot data-keep="${key}${live}"><div><b>–</b><span>Tiefst</span></div><i></i><div><b>–</b><span>Mittel</span></div><i></i><div><b>–</b><span>Höchst</span></div></div>`;
+  return `<div class="big"><b>${deg(d.temp)}<small> °C</small></b><span>${tr('Temperatur jetzt')}</span></div>
+    <div class="periods" role="group" aria-label="${tr('Zeitraum')}">${TPERIODS().map(([k, l]) => `<button type="button" data-tperiod="${k}" aria-pressed="${p === k}">${l}</button>`).join('')}</div>
+    <div class="nav"><span class="sp"></span><span class="date">${periodLabel(p, tview.day)}</span><button type="button" class="arr" data-tshift="-1" aria-label="${tr('zurück')}">‹</button><button type="button" class="arr" data-tshift="1" aria-label="${tr('vor')}" ${shiftPeriod(p, tview.day, 1) > S.today ? 'disabled' : ''}>›</button></div>
+    <div class="chart temp" data-tchart="${key}" data-keep="${key}${live}"><div class="empty">${tr('Lädt …')}</div></div>
+    <div class="foot three" data-tfoot data-keep="${key}${live}"><div><b>–</b><span>${tr('Tiefst')}</span></div><i></i><div><b>–</b><span>${tr('Mittel')}</span></div><i></i><div><b>–</b><span>${tr('Höchst')}</span></div></div>`;
 }
 const temps = new Map();
 async function tempData(mac, period, ref) {
@@ -737,13 +759,13 @@ function tempSVG(t, limit) {
   const W0 = 38, W1 = 316, H0 = 14, H1 = 190, ax = tempAxis(t.min, t.max, limit), y = (v) => H1 - (H1 - H0) * (v - ax.lo) / (ax.hi - ax.lo);
   const grid = Array.from({ length: Math.round((ax.hi - ax.lo) / ax.step) + 1 }, (_, k) => ax.lo + k * ax.step);
   const gridSVG = grid.map((g) => `<line x1="${W0}" x2="${W1}" y1="${y(g)}" y2="${y(g)}" stroke="#3a3a3a" stroke-width=".6"/><text x="${W0 - 4}" y="${y(g) + 3}" text-anchor="end" font-size="9" fill="#bdbdbd">${g}°</text>`).join('');
-  const lim = limit != null && limit <= ax.hi ? `<line class="tlim" x1="${W0}" x2="${W1}" y1="${y(limit)}" y2="${y(limit)}" stroke="#ff5a4e" stroke-dasharray="4 3" stroke-width=".9"/><text x="${W1}" y="${y(limit) - 4}" text-anchor="end" font-size="9" fill="#ff5a4e">aus über ${limit}°</text>` : '';
+  const lim = limit != null && limit <= ax.hi ? `<line class="tlim" x1="${W0}" x2="${W1}" y1="${y(limit)}" y2="${y(limit)}" stroke="#ff5a4e" stroke-dasharray="4 3" stroke-width=".9"/><text x="${W1}" y="${y(limit) - 4}" text-anchor="end" font-size="9" fill="#ff5a4e">${tr('aus über {0}°', limit)}</text>` : '';
   if (t.period === 'day') {
     const n = t.t.length, x = (i) => W0 + (W1 - W0) * i / (n - 1), segs = []; let cur = [];
     t.t.forEach((v, i) => { if (v == null) { if (cur.length) segs.push(cur); cur = []; } else cur.push([x(i), y(v)]); });
     if (cur.length) segs.push(cur);
     for (const sg of segs) if (sg.length === 1) sg.push([sg[0][0] + (W1 - W0) / (n - 1), sg[0][1]]);
-    return `<svg viewBox="0 0 320 214" role="img" aria-label="Temperatur ${dayLabel(t.ref)}, ${deg(t.min)} bis ${deg(t.max)} °C">${gridSVG}${lim}
+    return `<svg viewBox="0 0 320 214" role="img" aria-label="${tr('Temperatur {0}, {1} bis {2} °C', dayLabel(t.ref), deg(t.min), deg(t.max))}">${gridSVG}${lim}
       ${segs.map((sg) => `<path class="tline" d="M${sg.map((q) => q.join(',')).join(' L')}" fill="none" stroke="#efefef" stroke-width="1.4" stroke-linejoin="round"/>`).join('')}
       <line x1="${W0}" x2="${W0}" y1="${H0 - 8}" y2="${H1}" stroke="#bdbdbd" stroke-width=".8"/>
       ${['00:00', '06:00', '12:00', '18:00', '24:00'].map((l, k) => `<text x="${W0 + (W1 - W0) * k / 4}" y="${H1 + 16}" text-anchor="${k === 0 ? 'start' : k === 4 ? 'end' : 'middle'}" font-size="9" fill="#bdbdbd">${l}</text>`).join('')}
@@ -751,7 +773,7 @@ function tempSVG(t, limit) {
   }
   // Week/month: range from min to max per day, tick at the mean
   const n = t.days.length, slot = (W1 - W0) / n, bw = Math.max(3, Math.min(14, slot * 0.5));
-  return `<svg viewBox="0 0 320 214" role="img" aria-label="Temperatur je Tag, ${deg(t.min)} bis ${deg(t.max)} °C">${gridSVG}${lim}
+  return `<svg viewBox="0 0 320 214" role="img" aria-label="${tr('Temperatur je Tag, {0} bis {1} °C', deg(t.min), deg(t.max))}">${gridSVG}${lim}
     ${t.days.map((dd, i) => { if (dd.min == null) return ''; const cx = W0 + slot * (i + 0.5), top = y(dd.max), h = Math.max(bw, y(dd.min) - top);
       return `<rect class="tbar${dd.key === S.today ? ' now' : ''}" x="${(cx - bw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="${(bw / 2).toFixed(1)}" fill="#bdbdbd"/>
         <line class="tavg" x1="${(cx - bw / 2 - 1).toFixed(1)}" x2="${(cx + bw / 2 + 1).toFixed(1)}" y1="${y(dd.avg).toFixed(1)}" y2="${y(dd.avg).toFixed(1)}" stroke="#111" stroke-width="1.4"/>`; }).join('')}
@@ -774,7 +796,7 @@ function tempTip(el, t) {
     } else {
       const slot = (316 - 38) / t.days.length, i = Math.floor((vx - 38) / slot), dd = t.days[i];
       if (!dd || dd.min == null) { hide(); return; }
-      x = 38 + slot * (i + 0.5); text = `${t.period === 'week' ? dd.label : `${dd.label}.`} · ${deg(dd.min)}–${deg(dd.max)} °C`;
+      x = 38 + slot * (i + 0.5); text = `${t.period === 'week' ? dd.label : tr('{0}.', dd.label)} · ${deg(dd.min)}–${deg(dd.max)} °C`;
     }
     if (!tip) { tip = document.createElement('span'); tip.className = 'tip'; el.append(tip); }
     tip.textContent = text; tip.style.left = `${x / 320 * r.width + 2}px`;
@@ -792,17 +814,17 @@ async function fillCharts() {
       if (period !== 'day') {
         const b = await barData(m, period, day);
         if (!el.isConnected) return;
-        el.innerHTML = barSVG(b) + (b.wh ? '' : '<div class="empty">Keine Daten für diesen Zeitraum</div>');
+        el.innerHTML = barSVG(b) + (b.wh ? '' : `<div class="empty">${tr('Keine Daten für diesen Zeitraum')}</div>`);
         const foot = $('[data-foot]');
-        if (foot) { foot.dataset.filled = foot.dataset.keep; foot.innerHTML = `<div><b>${kwh(b.wh)}<small> kWh</small></b><span>Verbrauch</span></div><i></i><div><b>${chf(b.wh)}<small> CHF</small></b><span>Kosten</span></div>`; }
+        if (foot) { foot.dataset.filled = foot.dataset.keep; foot.innerHTML = `<div><b>${kwh(b.wh)}<small> kWh</small></b><span>${tr('Verbrauch')}</span></div><i></i><div><b>${chf(b.wh)}<small> CHF</small></b><span>${tr('Kosten')}</span></div>`; }
         barTip(el, b);
         continue;
       }
       const c = await curve(m, day);
       if (!el.isConnected) return;
-      el.innerHTML = areaSVG(c) + (c.w.some((x) => x != null) ? '' : '<div class="empty">Keine Daten für diesen Tag</div>');
+      el.innerHTML = areaSVG(c) + (c.w.some((x) => x != null) ? '' : `<div class="empty">${tr('Keine Daten für diesen Tag')}</div>`);
       const foot = $('[data-foot]');
-      if (foot) { foot.dataset.filled = foot.dataset.keep; foot.innerHTML = `<div><b>${kwh(c.wh)}<small> kWh</small></b><span>Verbrauch</span></div><i></i><div><b>${chf(c.wh)}<small> CHF</small></b><span>Kosten</span></div>`; }
+      if (foot) { foot.dataset.filled = foot.dataset.keep; foot.innerHTML = `<div><b>${kwh(c.wh)}<small> kWh</small></b><span>${tr('Verbrauch')}</span></div><i></i><div><b>${chf(c.wh)}<small> CHF</small></b><span>${tr('Kosten')}</span></div>`; }
       chartTip(el, c);
     } catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
   }
@@ -811,10 +833,10 @@ async function fillCharts() {
     try {
       const t = await tempData(mac, period, ref), d = dev(mac);
       if (!el.isConnected) return;
-      el.innerHTML = t.min == null ? `<div class="empty">Keine Messungen für diesen Zeitraum</div>` : tempSVG(t, d?.cfg.temp.on ? d.cfg.temp.max : null);
+      el.innerHTML = t.min == null ? `<div class="empty">${tr('Keine Messungen für diesen Zeitraum')}</div>` : tempSVG(t, d?.cfg.temp.on ? d.cfg.temp.max : null);
       if (t.min != null) tempTip(el, t);
       const foot = $('[data-tfoot]');
-      if (foot) { foot.dataset.filled = foot.dataset.keep; foot.innerHTML = [['Tiefst', t.min], ['Mittel', t.avg], ['Höchst', t.max]].map(([l, v]) => `<div><b>${deg(v)}<small> °C</small></b><span>${l}</span></div>`).join('<i></i>'); }
+      if (foot) { foot.dataset.filled = foot.dataset.keep; foot.innerHTML = [[tr('Tiefst'), t.min], [tr('Mittel'), t.avg], [tr('Höchst'), t.max]].map(([l, v]) => `<div><b>${deg(v)}<small> °C</small></b><span>${l}</span></div>`).join('<i></i>'); }
     } catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
   }
   for (const el of document.querySelectorAll('[data-diag]:not([data-filled])')) {
@@ -831,7 +853,7 @@ async function fillCharts() {
     try {
       const t = await api(`api/totals?mac=${el.dataset.totals}`);
       if (!el.isConnected) return;
-      el.innerHTML = [['Diese Woche', t.week], ['Dieser Monat', t.month], ['Dieses Jahr', t.year], [t.since ? `Seit ${new Date(t.since).toLocaleDateString('de-CH')}` : 'Gesamt', t.all]]
+      el.innerHTML = [[tr('Diese Woche'), t.week], [tr('Dieser Monat'), t.month], [tr('Dieses Jahr'), t.year], [t.since ? tr('Seit {0}', new Date(t.since).toLocaleDateString(LOC())) : tr('Gesamt'), t.all]]
         .map(([l, wh]) => row(l, val(`${kwh(wh)} kWh · CHF ${chf(wh)}`))).join('');
     } catch { /* stays empty */ }
   }
@@ -859,88 +881,88 @@ function devPickTiles() {
     ${tmp}<span class="ico">${icon}${sel ? chk : ''}</span><span class="lb">${label}</span><span class="sub">${sub}</span></button>`; };
   const total = SW().reduce((a, d) => a + d.w, 0), totalWh = SW().reduce((a, d) => a + d.todayWh, 0);
   return `<div class="grid">
-    ${t('all', false, I.bolt, `${pw(total)}<br>Alle Geräte`, `${kwh(totalWh)} kWh heute`)}
-    ${SW().map((d) => t(d.mac, d.relay, devIcon(d), `${d.relay ? `${pw(d.w)}<br>` : ''}${esc(d.name)}`, `${kwh(d.todayWh)} kWh heute`, d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : '')).join('')}
+    ${t('all', false, I.bolt, `${pw(total)}<br>${tr('Alle Geräte')}`, tr('{0} kWh heute', kwh(totalWh)))}
+    ${SW().map((d) => t(d.mac, d.relay, devIcon(d), `${d.relay ? `${pw(d.w)}<br>` : ''}${esc(d.name)}`, tr('{0} kWh heute', kwh(d.todayWh)), d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : '')).join('')}
   </div>`;
 }
 function energyHTML() {
   const m = view.mac, month = (view.day || S.today).slice(0, 7);
-  return HD('Verbrauch', 'home') + chartHTML(m, true) + totalsHTML(m)
-    + (pickedMacs(m).length > 1 ? `<p class="sec">Heute je Gerät</p><div class="ls">${pickedMacs(m).map(dev).map((d) => row(esc(d.name), chev(`${kwh(d.todayWh)} kWh`), '', `data-go="dev/${d.mac}/eval"`)).join('')}</div>` : '')
-    + `<button type="button" class="btn grey" data-go="export">Exportieren (CSV)</button>`;
+  return HD(tr('Verbrauch'), 'home') + chartHTML(m, true) + totalsHTML(m)
+    + (pickedMacs(m).length > 1 ? `<p class="sec">${tr('Heute je Gerät')}</p><div class="ls">${pickedMacs(m).map(dev).map((d) => row(esc(d.name), chev(`${kwh(d.todayWh)} kWh`), '', `data-go="dev/${d.mac}/eval"`)).join('')}</div>` : '')
+    + `<button type="button" class="btn grey" data-go="export">${tr('Exportieren (CSV)')}</button>`;
 }
 // Export: choose device, period and resolution, then download as CSV (opens in Excel or Numbers)
 const exp = { mac: null, from: null, to: null, res: 'hour' };
 function exportHTML() {
   exp.mac ??= view.mac; exp.from ||= `${S.today.slice(0, 7)}-01`; exp.to ||= S.today;
   const prev = shiftPeriod('month', S.today, -1), y = S.today.slice(0, 4);
-  const ranges = [['Dieser Monat', `${S.today.slice(0, 7)}-01`, S.today], ['Letzter Monat', prev, lastOfMonth(prev.slice(0, 7))], ['Dieses Jahr', `${y}-01-01`, S.today], ['Alles', '2020-01-01', S.today]];
+  const ranges = [[tr('Dieser Monat'), `${S.today.slice(0, 7)}-01`, S.today], [tr('Letzter Monat'), prev, lastOfMonth(prev.slice(0, 7))], [tr('Dieses Jahr'), `${y}-01-01`, S.today], [tr('Alles'), '2020-01-01', S.today]];
   const chip = (attr, v, l, on) => `<button type="button" class="chip" ${attr}="${esc(v)}" aria-pressed="${on}">${esc(l)}</button>`;
   const href = `api/export.csv?mac=${exp.mac}&from=${exp.from}&to=${exp.to}&res=${exp.res}`;
   const days = Math.max(1, Math.round((Date.parse(exp.to) - Date.parse(exp.from)) / 864e5) + 1), n = pickedMacs(exp.mac).length;
   const rows = Math.round(days * n * { raw: 2880, '5min': 288, hour: 24, day: 1 }[exp.res]);
-  return HD('Exportieren', 'energy') + `<p class="intro">Messwerte als CSV-Datei, z. B. für Excel oder Numbers.</p>
-    <p class="sec">Gerät</p><div class="chips">${chip('data-exp-mac', 'all', 'Alle Geräte', exp.mac === 'all')}${exp.mac.includes(',') ? chip('data-exp-mac', exp.mac, pickedName(exp.mac), true) : ''}${SW().map((d) => chip('data-exp-mac', d.mac, d.name, exp.mac === d.mac)).join('')}</div>
-    <p class="sec">Zeitraum</p><div class="chips">${ranges.map(([l, a, b]) => chip('data-exp-range', `${a}|${b}`, l, exp.from === a && exp.to === b)).join('')}</div>
-    <div class="ls">${lrow('Von', `<input type="date" data-exp-in="from" value="${exp.from}" max="${S.today}">`)}${lrow('Bis', `<input type="date" data-exp-in="to" value="${exp.to}" max="${S.today}">`)}</div>
-    <p class="sec">Auflösung</p><div class="chips">${[['raw', 'alle 30 s'], ['5min', '5 Minuten'], ['hour', 'Stunde'], ['day', 'Tag']].map(([v, l]) => chip('data-exp-res', v, l, exp.res === v)).join('')}</div>
-    <p class="note">Etwa ${rows.toLocaleString('de-CH')} Zeilen${exp.res === 'raw' ? ', jede Messung einzeln' : ', je Abschnitt Ø Leistung und Energie'}.</p>
-    <a class="btn" href="${href}" download>CSV herunterladen</a>`;
+  return HD(tr('Exportieren'), 'energy') + `<p class="intro">${tr('Messwerte als CSV-Datei, z. B. für Excel oder Numbers.')}</p>
+    <p class="sec">${tr('Gerät')}</p><div class="chips">${chip('data-exp-mac', 'all', tr('Alle Geräte'), exp.mac === 'all')}${exp.mac.includes(',') ? chip('data-exp-mac', exp.mac, pickedName(exp.mac), true) : ''}${SW().map((d) => chip('data-exp-mac', d.mac, d.name, exp.mac === d.mac)).join('')}</div>
+    <p class="sec">${tr('Zeitraum')}</p><div class="chips">${ranges.map(([l, a, b]) => chip('data-exp-range', `${a}|${b}`, l, exp.from === a && exp.to === b)).join('')}</div>
+    <div class="ls">${lrow(tr('Von'), `<input type="date" data-exp-in="from" value="${exp.from}" max="${S.today}">`)}${lrow(tr('Bis'), `<input type="date" data-exp-in="to" value="${exp.to}" max="${S.today}">`)}</div>
+    <p class="sec">${tr('Auflösung')}</p><div class="chips">${[['raw', tr('alle 30 s')], ['5min', tr('5 Minuten')], ['hour', tr('Stunde')], ['day', tr('Tag')]].map(([v, l]) => chip('data-exp-res', v, l, exp.res === v)).join('')}</div>
+    <p class="note">${exp.res === 'raw' ? tr('Etwa {0} Zeilen, jede Messung einzeln.', rows.toLocaleString(LOC())) : tr('Etwa {0} Zeilen, je Abschnitt Ø Leistung und Energie.', rows.toLocaleString(LOC()))}</p>
+    <a class="btn" href="${href}" download>${tr('CSV herunterladen')}</a>`;
 }
 const lastOfMonth = (ym) => { const [y, m] = ym.split('-').map(Number); return `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`; };
 
 // ---------- Scenes ----------
 function scenesHTML() {
-  return HD('Szenen', 'home') + '<p class="intro">Mehrere Steckdosen mit einem Tipp schalten.</p>'
-    + `<div class="ls">${S.scenes.map((s) => { const n = Object.keys(s.actions).length; return `<div class="row"><button type="button" class="tx" data-go="scene/${s.id}" style="text-align:left;flex:1"><b>${esc(s.name)}</b><span>${n ? Object.entries(s.actions).map(([mac, a]) => `${esc(dev(mac)?.name || '?')} ${a === 'on' ? 'an' : 'aus'}`).join(', ') : 'alle Steckdosen aus'}${s.time?.on ? ` · ${daysText(s.time.days)} ${s.time.at}` : ''}</span></button>
-      <button type="button" class="chip" data-run="${s.id}" aria-label="${esc(s.name)} ausführen">Ausführen</button></div>`; }).join('')}</div>
-    <button type="button" class="btn ghost" data-newscene="1">Neue Szene</button>`;
+  return HD(tr('Szenen'), 'home') + `<p class="intro">${tr('Mehrere Steckdosen mit einem Tipp schalten.')}</p>`
+    + `<div class="ls">${S.scenes.map((s) => { const n = Object.keys(s.actions).length; return `<div class="row"><button type="button" class="tx" data-go="scene/${s.id}" style="text-align:left;flex:1"><b>${esc(s.name)}</b><span>${n ? Object.entries(s.actions).map(([mac, a]) => (a === 'on' ? tr('{0} an', esc(dev(mac)?.name || '?')) : tr('{0} aus', esc(dev(mac)?.name || '?')))).join(', ') : tr('alle Steckdosen aus')}${s.time?.on ? ` · ${daysText(s.time.days)} ${s.time.at}` : ''}</span></button>
+      <button type="button" class="chip" data-run="${s.id}" aria-label="${tr('{0} ausführen', esc(s.name))}">${tr('Ausführen')}</button></div>`; }).join('')}</div>
+    <button type="button" class="btn ghost" data-newscene="1">${tr('Neue Szene')}</button>`;
 }
 function sceneHTML(id) {
   const s = S.scenes.find((x) => x.id === id);
-  if (!s) return HD('Szene', 'scenes') + '<p class="empty-state">Diese Szene gibt es nicht mehr.</p>';
+  if (!s) return HD(tr('Szene'), 'scenes') + `<p class="empty-state">${tr('Diese Szene gibt es nicht mehr.')}</p>`;
   const t = (s.time ||= { on: false, at: '23:00', days: [1, 2, 3, 4, 5, 6, 0] });
-  return HD('Szene bearbeiten', 'scenes') + `<div class="ls">${lrow('Name', `<input type="text" data-scene-name="${s.id}" value="${esc(s.name)}" maxlength="30">`)}</div>
-    <p class="sec">Was passiert</p><div class="ls">${SW().map((d) => `<div class="row"><span class="tx"><b>${esc(d.name)}</b></span><span class="chips" style="padding:0;margin:0">
-      ${[['', 'Nichts'], ['on', 'An'], ['off', 'Aus']].map(([a, l]) => `<button type="button" class="chip" data-sact="${s.id}|${d.mac}|${a}" aria-pressed="${(s.actions[d.mac] || '') === a}">${l}</button>`).join('')}</span></div>`).join('')}</div>
-    <p class="note">Ohne Auswahl schaltet die Szene alle Steckdosen aus.</p>
-    <p class="sec">Zu fester Zeit</p><div class="${t.on ? 'ls' : 'ls dim'}"><div class="row master"><span class="tx"><b>Automatisch ausführen</b></span><button type="button" class="sw" data-stime="${s.id}" aria-pressed="${t.on}" aria-label="Automatisch ausführen"></button></div>
-      ${lrow('Um', `<input type="time" data-sat="${s.id}" value="${t.at}">`)}</div>
-    <div class="chips days">${WD.map(([n, l]) => `<button type="button" class="chip" data-sday="${s.id}|${n}" aria-pressed="${t.days.includes(n)}">${l}</button>`).join('')}</div>
-    <button type="button" class="btn" data-run="${s.id}">Jetzt ausführen</button>
-    <button type="button" class="btn danger" data-delscene="${s.id}">Szene löschen</button>`;
+  return HD(tr('Szene bearbeiten'), 'scenes') + `<div class="ls">${lrow(tr('Name'), `<input type="text" data-scene-name="${s.id}" value="${esc(s.name)}" maxlength="30">`)}</div>
+    <p class="sec">${tr('Was passiert')}</p><div class="ls">${SW().map((d) => `<div class="row"><span class="tx"><b>${esc(d.name)}</b></span><span class="chips" style="padding:0;margin:0">
+      ${[['', tr('Nichts')], ['on', tr('An')], ['off', tr('Aus')]].map(([a, l]) => `<button type="button" class="chip" data-sact="${s.id}|${d.mac}|${a}" aria-pressed="${(s.actions[d.mac] || '') === a}">${l}</button>`).join('')}</span></div>`).join('')}</div>
+    <p class="note">${tr('Ohne Auswahl schaltet die Szene alle Steckdosen aus.')}</p>
+    <p class="sec">${tr('Zu fester Zeit')}</p><div class="${t.on ? 'ls' : 'ls dim'}"><div class="row master"><span class="tx"><b>${tr('Automatisch ausführen')}</b></span><button type="button" class="sw" data-stime="${s.id}" aria-pressed="${t.on}" aria-label="${tr('Automatisch ausführen')}"></button></div>
+      ${lrow(tr('Um'), `<input type="time" data-sat="${s.id}" value="${t.at}">`)}</div>
+    <div class="chips days">${WD().map(([n, l]) => `<button type="button" class="chip" data-sday="${s.id}|${n}" aria-pressed="${t.days.includes(n)}">${l}</button>`).join('')}</div>
+    <button type="button" class="btn" data-run="${s.id}">${tr('Jetzt ausführen')}</button>
+    <button type="button" class="btn danger" data-delscene="${s.id}">${tr('Szene löschen')}</button>`;
 }
 const saveScenes = async () => { try { S.scenes = await api('api/scenes', { method: 'PUT', body: JSON.stringify({ scenes: S.scenes }) }); render(); } catch (e) { toast(e.message, true); } };
 
 // ---------- Vacation (all plugs), rules, alarms, more ----------
 function guardHTML() {
-  return HD('Ferien', 'home') + '<p class="intro">Ferienmodus aller Steckdosen auf einen Blick. Eingeschaltet geht eine Steckdose in den Ferien morgens und abends zu wechselnden Zeiten an, damit das Haus bewohnt wirkt.</p>'
-    + `<div class="ls">${SW().map((d) => { const v = d.cfg.vacation, today = d.vacationToday.map((s) => `${s.key} ${s.start}`).join(', ');
-      return `<div class="row"><button type="button" class="tx" data-go="dev/${d.mac}/vacation" style="text-align:left;flex:1"><b>${esc(d.name)} ›</b><span>${v.on ? `${dShort(v.from)}–${dShort(v.to)}${today ? ` · heute ${today}` : ''}` : 'aus'}</span></button>${sw(`${d.mac}:vacation.on`, v.on, `Ferien ${d.name}`)}</div>`; }).join('')}</div>`;
+  return HD(tr('Ferien'), 'home') + `<p class="intro">${tr('Ferienmodus aller Steckdosen auf einen Blick. Eingeschaltet geht eine Steckdose in den Ferien morgens und abends zu wechselnden Zeiten an, damit das Haus bewohnt wirkt.')}</p>`
+    + `<div class="ls">${SW().map((d) => { const v = d.cfg.vacation, today = d.vacationToday.map((s) => `${slotName(s.key)} ${s.start}`).join(', ');
+      return `<div class="row"><button type="button" class="tx" data-go="dev/${d.mac}/vacation" style="text-align:left;flex:1"><b>${esc(d.name)} ›</b><span>${v.on ? `${dShort(v.from)}–${dShort(v.to)}${today ? ` · ${tr('heute {0}', today)}` : ''}` : tr('aus')}</span></button>${sw(`${d.mac}:vacation.on`, v.on, tr('Ferien {0}', d.name))}</div>`; }).join('')}</div>`;
 }
 function rulesHTML() {
-  const items = [...SW().flatMap((d) => FEAT.filter(([k]) => k !== 'eval' && k !== 'alarms').map(([k, ic, l]) => [d, k, l, ...featInfo(d, k)]).filter((x) => x[3])),
-    ...S.devices.filter((d) => d.kind === 'motion' && d.cfg.motion.on).map((d) => [d, '', 'Licht bei Bewegung', true, featInfo(d, 'motion')[1]])];
-  return HD('Regeln', 'home') + (items.length ? `<div class="ls">${items.map(([d, k, l, , txt]) => row(`${esc(d.name)} · ${l}`, chev(), esc(txt), `data-go="dev/${d.mac}/${k}"`)).join('')}</div>`
-    : '<p class="empty-state">Noch keine Regel aktiv.<br>Öffne eine Steckdose und schalte z. B. den Zeitplan ein.</p>');
+  const items = [...SW().flatMap((d) => FEAT().filter(([k]) => k !== 'eval' && k !== 'alarms').map(([k, ic, l]) => [d, k, l, ...featInfo(d, k)]).filter((x) => x[3])),
+    ...S.devices.filter((d) => d.kind === 'motion' && d.cfg.motion.on).map((d) => [d, '', tr('Licht bei Bewegung'), true, featInfo(d, 'motion')[1]])];
+  return HD(tr('Regeln'), 'home') + (items.length ? `<div class="ls">${items.map(([d, k, l, , txt]) => row(`${esc(d.name)} · ${l}`, chev(), esc(txt), `data-go="dev/${d.mac}/${k}"`)).join('')}</div>`
+    : `<p class="empty-state">${tr('Noch keine Regel aktiv.')}<br>${tr('Öffne eine Steckdose und schalte z. B. den Zeitplan ein.')}</p>`);
 }
 let events = null;
 function alarmsHTML() {
   const pushOk = 'PushManager' in window && 'serviceWorker' in navigator;
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const perm = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
-  return HD('Alarme', 'home') + `<p class="sec">Mitteilungen auf diesem Gerät</p><div class="ls">
-      ${!pushOk ? row('Nicht möglich', '', standalone ? 'Dieser Browser kann keine Mitteilungen.' : 'Auf dem iPhone zuerst „Zum Home-Bildschirm“ hinzufügen und von dort öffnen.')
-        : perm === 'granted' && S.pushSubs ? row('Erlaubt', val('✓'), `${S.pushSubs} Gerät${S.pushSubs > 1 ? 'e' : ''} angemeldet`) + row('Test senden', chev(), '', 'data-pushtest="1"')
-          : row('Mitteilungen erlauben', chev(), 'für Offline, ungewöhnlichen Verbrauch, Hitze', 'data-push="1"')}</div>
-    <p class="sec">Pro Gerät</p><div class="ls">${S.devices.filter((d) => d.kind !== 'button').map((d) => row(esc(d.name), chev(`${featInfo(d, 'alarms')[1]}`), '', `data-go="dev/${d.mac}/alarms"`)).join('')}</div>
-    <p class="sec">Verlauf</p><div class="ls" data-events>${events ? eventsHTML() : row('Lädt …', '')}</div>`;
+  return HD(tr('Alarme'), 'home') + `<p class="sec">${tr('Mitteilungen auf diesem Gerät')}</p><div class="ls">
+      ${!pushOk ? row(tr('Nicht möglich'), '', standalone ? tr('Dieser Browser kann keine Mitteilungen.') : tr('Auf dem iPhone zuerst „Zum Home-Bildschirm“ hinzufügen und von dort öffnen.'))
+        : perm === 'granted' && S.pushSubs ? row(tr('Erlaubt'), val('✓'), tr('{0} angemeldet', nDev(S.pushSubs))) + row(tr('Test senden'), chev(), '', 'data-pushtest="1"')
+          : row(tr('Mitteilungen erlauben'), chev(), tr('für Offline, ungewöhnlichen Verbrauch, Hitze'), 'data-push="1"')}</div>
+    <p class="sec">${tr('Pro Gerät')}</p><div class="ls">${S.devices.filter((d) => d.kind !== 'button').map((d) => row(esc(d.name), chev(`${featInfo(d, 'alarms')[1]}`), '', `data-go="dev/${d.mac}/alarms"`)).join('')}</div>
+    <p class="sec">${tr('Verlauf')}</p><div class="ls" data-events>${events ? eventsHTML() : row(tr('Lädt …'), '')}</div>`;
 }
 function eventsHTML() {
-  if (!events.length) return row('Noch nichts passiert', '');
+  if (!events.length) return row(tr('Noch nichts passiert'), '');
   return events.map((e) => { const d = dev(e.mac), t = new Date(e.ts);
-    const when = t.toDateString() === new Date().toDateString() ? t.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : t.toLocaleDateString('de-CH', { day: 'numeric', month: 'numeric' });
-    return `<div class="row ev"><time>${when}</time><span class="tx"><b>${esc(d?.name || e.mac)} ${e.kind === 'on' ? 'an' : e.kind === 'off' ? 'aus' : ''}</b><span>${e.kind === 'alarm' ? '⚠︎ ' : ''}${esc(e.text)}</span></span></div>`; }).join('');
+    const when = t.toDateString() === new Date().toDateString() ? t.toLocaleTimeString(LOC(), { hour: '2-digit', minute: '2-digit' }) : t.toLocaleDateString(LOC(), { day: 'numeric', month: 'numeric' });
+    return `<div class="row ev"><time>${when}</time><span class="tx"><b>${e.kind === 'on' ? tr('{0} an', esc(d?.name || e.mac)) : e.kind === 'off' ? tr('{0} aus', esc(d?.name || e.mac)) : esc(d?.name || e.mac)}</b><span>${e.kind === 'alarm' ? '⚠︎ ' : ''}${esc(e.text)}</span></span></div>`; }).join('');
 }
 // Design: "Modern" (default) or "myStrom" like the original app; applies per device
 const design = () => (store.get('design') === 'mystrom' ? 'mystrom' : 'modern');
@@ -952,17 +974,17 @@ function setDesign(v) {
 }
 function moreHTML() {
   const s = S.settings;
-  return HD('Einstellungen', 'home') + `<p class="sec">Strom</p><div class="ls">${lrow('Preis pro kWh', `<input type="number" data-setting="price" value="${s.price}" step="0.01" min="0" max="2" inputmode="decimal">`, 'CHF')}</div>
-    <p class="sec">Standort</p><div class="ls">
-      ${lrow('Ort', `<input type="text" data-place="1" value="${esc(s.place || '')}" placeholder="z. B. Zürich" maxlength="80" enterkeyhint="search" autocomplete="off" style="max-width:200px">`, `${Number(s.lat).toFixed(2)}, ${Number(s.lon).toFixed(2)}${S.sun ? ` · Sonne ${S.sun.rise}–${S.sun.set}` : ''}`)}
-      ${'geolocation' in navigator ? row('Standort vom Handy übernehmen', chev(), 'einmalig, nach deiner Freigabe', 'data-geo="1"') : ''}</div>
-    <p class="note">Nur für Sonnenauf- und -untergang. Ein eingetippter Ort wird einmal bei Open-Meteo nachgeschlagen; vom Handy kommen die Koordinaten direkt.</p>
-    <p class="sec">Design</p><div class="chips">${[['modern', 'Modern'], ['mystrom', 'myStrom']].map(([v, l]) => `<button type="button" class="chip" data-design="${v}" aria-pressed="${design() === v}">${l}</button>`).join('')}</div>
+  return HD(tr('Einstellungen'), 'home') + `<p class="sec">${tr('Strom')}</p><div class="ls">${lrow(tr('Preis pro kWh'), `<input type="number" data-setting="price" value="${s.price}" step="0.01" min="0" max="2" inputmode="decimal">`, 'CHF')}</div>
+    <p class="sec">${tr('Standort')}</p><div class="ls">
+      ${lrow(tr('Ort'), `<input type="text" data-place="1" value="${esc(s.place || '')}" placeholder="${tr('z. B. Zürich')}" maxlength="80" enterkeyhint="search" autocomplete="off" style="max-width:200px">`, `${Number(s.lat).toFixed(2)}, ${Number(s.lon).toFixed(2)}${S.sun ? ` · ${tr('Sonne {0}–{1}', S.sun.rise, S.sun.set)}` : ''}`)}
+      ${'geolocation' in navigator ? row(tr('Standort vom Handy übernehmen'), chev(), tr('einmalig, nach deiner Freigabe'), 'data-geo="1"') : ''}</div>
+    <p class="note">${tr('Nur für Sonnenauf- und -untergang. Ein eingetippter Ort wird einmal bei Open-Meteo nachgeschlagen; vom Handy kommen die Koordinaten direkt.')}</p>
+    <p class="sec">${tr('Design')}</p><div class="chips">${[['modern', tr('Modern')], ['mystrom', 'myStrom']].map(([v, l]) => `<button type="button" class="chip" data-design="${v}" aria-pressed="${design() === v}">${l}</button>`).join('')}</div>
     <p class="sec">Sprache · Language</p><div class="chips">${[['de', 'Deutsch'], ['en', 'English']].map(([v, l]) => `<button type="button" class="chip" data-lang="${v}" aria-pressed="${lang() === v}">${l}</button>`).join('')}</div>
-    <p class="sec">Geräte</p><div class="ls">${S.devices.map((d) => row(esc(d.name), chev(esc(d.ip)), `${esc(d.typeName)} · ${d.online ? 'erreichbar' : 'offline'}`, `data-go="dev/${d.mac}/settings"`)).join('')}
-      ${lrow('Per IP hinzufügen', '<input type="text" id="addip" placeholder="192.168.0.42" inputmode="decimal" style="background:#2a2a2a;color:#e8e8e8;padding:7px 9px;text-align:left;max-width:160px">')}</div>
-    <p class="note">Neue myStrom-Geräte im WLAN (Steckdosen, Lampen, Taster, Bewegungsmelder) findet die App von selbst. Eine IP brauchst du nur, wenn sich eines nicht meldet; Taster melden sich nach dem ersten Drücken.</p>
-    <p class="sec">Über</p><div class="ls">${row('Läuft lokal', val('ohne Konto'), 'Alle Funktionen von myStrom PLUS, PRO, DATA PRO und HOME GUARD, gratis. Daten bleiben bei dir.')}</div>`;
+    <p class="sec">${tr('Geräte')}</p><div class="ls">${S.devices.map((d) => row(esc(d.name), chev(esc(d.ip)), `${esc(d.typeName)} · ${d.online ? tr('erreichbar') : tr('offline')}`, `data-go="dev/${d.mac}/settings"`)).join('')}
+      ${lrow(tr('Per IP hinzufügen'), '<input type="text" id="addip" placeholder="192.168.0.42" inputmode="decimal" style="background:#2a2a2a;color:#e8e8e8;padding:7px 9px;text-align:left;max-width:160px">')}</div>
+    <p class="note">${tr('Neue myStrom-Geräte im WLAN (Steckdosen, Lampen, Taster, Bewegungsmelder) findet die App von selbst. Eine IP brauchst du nur, wenn sich eines nicht meldet; Taster melden sich nach dem ersten Drücken.')}</p>
+    <p class="sec">${tr('Über')}</p><div class="ls">${row(tr('Läuft lokal'), val(tr('ohne Konto')), tr('Alle Funktionen von myStrom PLUS, PRO, DATA PRO und HOME GUARD, gratis. Daten bleiben bei dir.'))}</div>`;
 }
 
 // ---------- Rendering ----------
@@ -989,7 +1011,7 @@ function render(fresh = false) {
   document.documentElement.lang = lang();
   const [r0, r1, r2, r3] = route(), d = r0 === 'dev' ? dev(r1) : null;
   let html;
-  if (r0 === 'dev') html = !d ? `${HD('Steckdose', 'home')}<p class="empty-state">Diese Steckdose gibt es nicht mehr.</p>` : r2 ? featureHTML(d, r2, r3) : deviceHTML(d);
+  if (r0 === 'dev') html = !d ? `${HD(tr('Steckdose'), 'home')}<p class="empty-state">${tr('Diese Steckdose gibt es nicht mehr.')}</p>` : r2 ? featureHTML(d, r2, r3) : deviceHTML(d);
   else if (r0 === 'export') html = exportHTML();
   else if (r0 === 'order') html = orderHTML();
   else html = { energy: energyHTML, scenes: scenesHTML, guard: guardHTML, rules: rulesHTML, alarms: alarmsHTML, more: moreHTML }[r0]?.() ?? (r0 === 'scene' ? sceneHTML(r1) : homeHTML());
@@ -1008,7 +1030,7 @@ function nextPanel(tile, on, name) {
   let n = tile.querySelector('.next');
   if (!n) { n = document.createElement('div'); n.className = 'next'; n.dataset.transient = '1'; tile.append(n); }
   n.classList.toggle('to-on', on); n.classList.toggle('to-off', !on);
-  n.innerHTML = `${POWER}<b>${on ? 'AN' : 'AUS'}</b><span>${esc(name)}</span>`;
+  n.innerHTML = `${POWER}<b>${on ? tr('AN') : tr('AUS')}</b><span>${esc(name)}</span>`;
   return n;
 }
 // Set page and counterpart to the finger position (x in px, positive = to the right)
@@ -1069,7 +1091,7 @@ const endSwipe = (e) => {
   // if the browser takes over the gesture (e.g. for scrolling), never toggle, spring back instead
   if (e?.type === 'pointercancel') { snapBack(s); return; }
   const d = dev(s.b.dataset.swipe), w = s.tile.offsetWidth;
-  if (s.blocked) { place(s.tile, 0, true); swipe = null; shake(s.tile); haptic([8, 60, 8]); toast(d.cfg.lock ? `${d.name}: Tastensperre ist an` : `${d.name} ist nicht erreichbar`, !d.cfg.lock); return; }
+  if (s.blocked) { place(s.tile, 0, true); swipe = null; shake(s.tile); haptic([8, 60, 8]); toast(d.cfg.lock ? tr('{0}: Tastensperre ist an', d.name) : tr('{0} ist nicht erreichbar', d.name), !d.cfg.lock); return; }
   // dragged far enough, or flicked short and fast in the same direction (finger still moving at the end)
   const moving = e && s.lt && e.timeStamp - s.lt < 90, v = moving ? s.v || 0 : 0;
   const flick = Math.abs(v) > 0.45 && Math.sign(v) === Math.sign(s.dx) && Math.abs(s.dx) > w * 0.12;
@@ -1082,7 +1104,7 @@ addEventListener('pointerup', endSwipe); // also released outside the app
 
 function tapFlip(el, d) {
   const tile = el.closest('.tile');
-  if (d.cfg.lock || !d.online) { shake(tile); haptic([8, 60, 8]); toast(d.cfg.lock ? `${d.name}: Tastensperre ist an` : `${d.name} ist nicht erreichbar`, !d.cfg.lock); return; }
+  if (d.cfg.lock || !d.online) { shake(tile); haptic([8, 60, 8]); toast(d.cfg.lock ? tr('{0}: Tastensperre ist an', d.name) : tr('{0} ist nicht erreichbar', d.name), !d.cfg.lock); return; }
   if (swipe) return;
   swipe = { b: el, tile, busy: true, live: true, dx: 0 };
   haptic();
@@ -1094,13 +1116,13 @@ function openMenu() {
   const el = document.createElement('div'), total = SW().reduce((a, d) => a + d.w, 0);
   const item = (attr, icon, label, sub = '') => `<button type="button" class="ni" ${attr}><span class="nic">${icon}</span><span class="ntx">${label}${sub ? `<small>${sub}</small>` : ''}</span></button>`;
   el.className = 'drawer';
-  el.innerHTML = `<div class="drawer-bg" data-close></div><nav class="drawer-panel" role="dialog" aria-modal="true" aria-label="Menü">
-    <div class="drawer-hd"><b>myStrom</b><span>${S.devices.length} Gerät${S.devices.length === 1 ? '' : 'e'} · ${pw(total)}</span></div>
-    <div class="ngrp">${[['scenes', I.scenes, 'Szenen'], ['rules', I.rules, 'Regeln'], ['guard', I.beach, 'Ferien'], ['energy', I.bolt, 'Verbrauch'], ['alarms', I.bell, 'Alarme']]
+  el.innerHTML = `<div class="drawer-bg" data-close></div><nav class="drawer-panel" role="dialog" aria-modal="true" aria-label="${tr('Menü')}">
+    <div class="drawer-hd"><b>myStrom</b><span>${nDev(S.devices.length)} · ${pw(total)}</span></div>
+    <div class="ngrp">${[['scenes', I.scenes, tr('Szenen')], ['rules', I.rules, tr('Regeln')], ['guard', I.beach, tr('Ferien')], ['energy', I.bolt, tr('Verbrauch')], ['alarms', I.bell, tr('Alarme')]]
       .map(([h, ic, l]) => item(`data-ngo="${h}"`, ic, l)).join('')}</div>
-    <p class="nsec">Geräte</p><div class="ngrp">${S.devices.map((d) => item(`data-ngo="dev/${d.mac}"`, `<i class="dot ${!d.online ? 'off-line' : d.relay || d.motion ? 'on' : ''}"></i>`, esc(d.name),
+    <p class="nsec">${tr('Geräte')}</p><div class="ngrp">${S.devices.map((d) => item(`data-ngo="dev/${d.mac}"`, `<i class="dot ${!d.online ? 'off-line' : d.relay || d.motion ? 'on' : ''}"></i>`, esc(d.name),
       kindSub(d))).join('')}</div>
-    <div class="ngrp nfoot">${item('data-nedit="1"', I.menu, 'Startseite anordnen')}${item('data-ngo="more"', I.gear, 'Einstellungen')}</div>
+    <div class="ngrp nfoot">${item('data-nedit="1"', I.menu, tr('Startseite anordnen'))}${item('data-ngo="more"', I.gear, tr('Einstellungen'))}</div>
   </nav>`;
   const close = () => { el.classList.remove('open'); removeEventListener('keydown', onKey); setTimeout(() => el.remove(), 260); document.querySelector('[data-menu]')?.focus(); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
@@ -1125,8 +1147,8 @@ function openDevPick() {
   document.querySelector('.pick')?.remove();
   const el = document.createElement('div');
   el.className = 'pick';
-  el.innerHTML = `<div class="pick-bg" data-close></div><div class="pick-sheet" role="dialog" aria-label="Geräte wählen">
-    <div class="pick-hd"><b>Geräte wählen</b><button type="button" data-close>Fertig</button></div>${devPickTiles()}</div>`;
+  el.innerHTML = `<div class="pick-bg" data-close></div><div class="pick-sheet" role="dialog" aria-label="${tr('Geräte wählen')}">
+    <div class="pick-hd"><b>${tr('Geräte wählen')}</b><button type="button" data-close>${tr('Fertig')}</button></div>${devPickTiles()}</div>`;
   const close = () => { el.classList.remove('open'); setTimeout(() => el.remove(), 300); };
   el.addEventListener('click', (e) => {
     const o = e.target.closest('[data-pickdev]');
@@ -1236,7 +1258,7 @@ app.addEventListener('click', async (e) => {
     go(`dev/${d.mac}`);
   } else if ((el = at('[data-devtoggle]'))) {
     const d = dev(el.dataset.devtoggle);
-    if (d.cfg.lock || !d.online) { shake(el); haptic([8, 60, 8]); toast(d.cfg.lock ? `${d.name}: Tastensperre ist an` : `${d.name} ist nicht erreichbar`, !d.cfg.lock); }
+    if (d.cfg.lock || !d.online) { shake(el); haptic([8, 60, 8]); toast(d.cfg.lock ? tr('{0}: Tastensperre ist an', d.name) : tr('{0} ist nicht erreichbar', d.name), !d.cfg.lock); }
     else { haptic(); switchDev(d.mac, !d.relay); }
   } else if ((el = at('[data-back]'))) { if (stack.length > 1) { scrolls[cur()] = scrollY; history.back(); } else back(el.dataset.back); }
   else if ((el = at('[data-actnew]'))) {
@@ -1244,7 +1266,7 @@ app.addEventListener('click', async (e) => {
     haptic(); await saveCfg(r1, { actions: [...d.cfg.actions, { id, on: true, ...tpl }] }); go(`dev/${r1}/actions/${id}`);
   } else if ((el = at('[data-atoggle]'))) { haptic(); const a = dev(r1).cfg.actions.find((x) => x.id === el.dataset.atoggle); updAct(r1, a.id, { on: !a.on }); }
   else if ((el = at('[data-aset]'))) { haptic(); const [f, v] = el.dataset.aset.split('|'), a = route()[3], patch = { [f]: v }; if (f === 'then' && v.startsWith('other') && !dev(r1).cfg.actions.find((x) => x.id === a).target) patch.target = S.devices.find((x) => x.mac !== r1)?.mac || ''; updAct(r1, a, patch); }
-  else if ((el = at('[data-adel]'))) { if (!confirm('Power Action löschen?')) return; await saveCfg(r1, { actions: dev(r1).cfg.actions.filter((x) => x.id !== el.dataset.adel) }); back(`dev/${r1}/actions`); }
+  else if ((el = at('[data-adel]'))) { if (!confirm(tr('Power Action löschen?'))) return; await saveCfg(r1, { actions: dev(r1).cfg.actions.filter((x) => x.id !== el.dataset.adel) }); back(`dev/${r1}/actions`); }
   else if ((el = at('[data-period]'))) { haptic(); view.period = el.dataset.period; render(); }
   else if ((el = at('[data-tperiod]'))) { haptic(); tview.period = el.dataset.tperiod; render(); }
   else if ((el = at('[data-tshift]'))) { tview.day = shiftPeriod(tview.period, tview.day, Number(el.dataset.tshift)); if (tview.day > S.today) tview.day = S.today; render(); }
@@ -1271,7 +1293,7 @@ app.addEventListener('click', async (e) => {
   else if ((el = at('[data-stpedit]'))) {
     const list = el.dataset.list, v = Number(el.dataset.v), isDur = /^dur/.test(list), inp = document.createElement('input');
     inp.className = 'stpin'; inp.dataset.stpin = el.dataset.stpedit; inp.dataset.list = list;
-    if (isDur) { inp.type = 'text'; inp.inputMode = 'numeric'; inp.value = `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`; inp.placeholder = 'Std:Min'; }
+    if (isDur) { inp.type = 'text'; inp.inputMode = 'numeric'; inp.value = `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`; inp.placeholder = tr('Std:Min'); }
     else { inp.type = 'text'; inp.inputMode = list === 'offs' || list === 'tcorr' ? 'text' : 'decimal'; inp.value = String(v); }
     inp.setAttribute('aria-label', el.getAttribute('aria-label').split(':')[0]);
     inp.enterKeyHint = 'done'; el.replaceWith(inp); inp.focus(); inp.select();
@@ -1286,7 +1308,7 @@ app.addEventListener('click', async (e) => {
   } else if ((el = at('[data-btnmac]'))) { haptic(); const [k, m] = el.dataset.btnmac.split('|'); saveCfg(r1, { button: { [k]: { mac: m } } }); }
   else if ((el = at('[data-btnscene]'))) { haptic(); const [k, id] = el.dataset.btnscene.split('|'); saveCfg(r1, { button: { [k]: { scene: id } } }); }
   else if ((el = at('[data-btntest]'))) {
-    haptic(); try { Object.assign(dev(r1), await api(`api/button/${r1}/${el.dataset.btntest}`, { method: 'POST' })); toast('Ausgeführt'); load(); } catch (x) { toast(x.message, true); }
+    haptic(); try { Object.assign(dev(r1), await api(`api/button/${r1}/${el.dataset.btntest}`, { method: 'POST' })); toast(tr('Ausgeführt')); load(); } catch (x) { toast(x.message, true); }
   } else if ((el = at('[data-mtarget]'))) {
     haptic(); const m = el.dataset.mtarget, t = dev(r1).cfg.motion.targets;
     saveCfg(r1, { motion: { targets: t.includes(m) ? t.filter((x) => x !== m) : [...t, m] } });
@@ -1301,38 +1323,38 @@ app.addEventListener('click', async (e) => {
   } else if (at('[data-schadd]')) {
     // a new schedule gets all remaining free days
     haptic(); const sc = dev(r1).cfg.schedule, used = sc.entries.flatMap((e) => e.days), last = sc.entries[sc.entries.length - 1];
-    saveCfg(r1, { schedule: { entries: [...sc.entries, { id: `s${Date.now().toString(36)}`, start: last?.start || '07:00', end: last?.end || '23:00', days: WD.map(([n]) => n).filter((n) => !used.includes(n)) }] } });
+    saveCfg(r1, { schedule: { entries: [...sc.entries, { id: `s${Date.now().toString(36)}`, start: last?.start || '07:00', end: last?.end || '23:00', days: WD().map(([n]) => n).filter((n) => !used.includes(n)) }] } });
   } else if ((el = at('[data-schdel]'))) { haptic(); updSch(r1, (e) => (e.id === el.dataset.schdel ? null : e)); }
   else if ((el = at('[data-dayshift]'))) { view.day = shiftPeriod(view.period, view.day, Number(el.dataset.dayshift)); if (view.day > S.today) view.day = S.today; render(); }
   else if (at('[data-devsel]')) { haptic(); openDevPick(); }
   else if (at('[data-menu]')) { haptic(); openMenu(); }
   else if ((el = at('[data-run]'))) {
     el.disabled = true; haptic();
-    try { const r = await api(`api/scenes/${el.dataset.run}/run`, { method: 'POST' }); await load(); toast(r.ok ? 'Szene ausgeführt' : `Nicht erreicht: ${r.errors.join(', ')}`, !r.ok); } catch (x) { toast(x.message, true); }
+    try { const r = await api(`api/scenes/${el.dataset.run}/run`, { method: 'POST' }); await load(); toast(r.ok ? tr('Szene ausgeführt') : tr('Nicht erreicht: {0}', r.errors.join(', ')), !r.ok); } catch (x) { toast(x.message, true); }
     el.disabled = false;
   } else if (at('[data-newscene]')) {
-    const s = { id: `s${Date.now().toString(36)}`, name: `Szene ${S.scenes.length + 1}`, actions: {} };
+    const s = { id: `s${Date.now().toString(36)}`, name: tr('Szene {0}', S.scenes.length + 1), actions: {} };
     S.scenes.push(s); await saveScenes(); go(`scene/${s.id}`);
   } else if ((el = at('[data-sact]'))) {
     const [id, mac, a] = el.dataset.sact.split('|'), s = S.scenes.find((x) => x.id === id);
     if (a) s.actions[mac] = a; else delete s.actions[mac];
     saveScenes();
   } else if ((el = at('[data-delscene]'))) {
-    if (!confirm('Szene löschen?')) return;
+    if (!confirm(tr('Szene löschen?'))) return;
     S.scenes = S.scenes.filter((x) => x.id !== el.dataset.delscene); await saveScenes(); back('scenes');
   } else if ((el = at('[data-remove]'))) {
     const d = dev(el.dataset.remove);
-    if (!confirm(`${d.name} aus der App entfernen? Der Verlauf bleibt gespeichert; meldet sich die Steckdose wieder, erscheint sie neu.`)) return;
+    if (!confirm(tr('{0} aus der App entfernen? Der Verlauf bleibt gespeichert; meldet sich die Steckdose wieder, erscheint sie neu.', d.name))) return;
     try { await api(`api/devices/${d.mac}`, { method: 'DELETE' }); await load(); back('home'); } catch (x) { toast(x.message, true); }
-  } else if (at('[data-push]')) { try { await pushEnable(); toast('Mitteilungen sind an'); await load(); } catch (x) { toast(x.message, true); } }
+  } else if (at('[data-push]')) { try { await pushEnable(); toast(tr('Mitteilungen sind an')); await load(); } catch (x) { toast(x.message, true); } }
   else if (at('[data-geo]')) {
     haptic();
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const lat = Math.round(pos.coords.latitude * 1e4) / 1e4, lon = Math.round(pos.coords.longitude * 1e4) / 1e4;
-      try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { lat, lon } }) }); toast('Standort übernommen'); load(); } catch (x) { toast(x.message, true); }
-    }, (err) => toast(err.code === 1 ? 'Standort nicht freigegeben (in den Einstellungen des Handys änderbar)' : 'Standort nicht verfügbar', true), { timeout: 15000, maximumAge: 600000 });
+      try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { lat, lon } }) }); toast(tr('Standort übernommen')); load(); } catch (x) { toast(x.message, true); }
+    }, (err) => toast(err.code === 1 ? tr('Standort nicht freigegeben (in den Einstellungen des Handys änderbar)') : tr('Standort nicht verfügbar'), true), { timeout: 15000, maximumAge: 600000 });
   }
-  else if (at('[data-pushtest]')) { try { await api('api/push/test', { method: 'POST' }); toast('Test gesendet'); } catch (x) { toast(x.message, true); } }
+  else if (at('[data-pushtest]')) { try { await api('api/push/test', { method: 'POST' }); toast(tr('Test gesendet')); } catch (x) { toast(x.message, true); } }
 });
 // Inputs: save as soon as a field is done
 app.addEventListener('change', async (e) => {
@@ -1344,12 +1366,12 @@ app.addEventListener('change', async (e) => {
     t.blur(); saveCfg(r1, { room: t.value.trim().slice(0, 40) }); setTimeout(() => back(`dev/${r1}/settings`), 180);
   } else if (t.dataset.place && t.value.trim() && t.value.trim() !== S.settings.place) {
     t.blur();
-    try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { place: t.value.trim() } }) }); render(); toast(`Gefunden: ${S.settings.place}`); load(); }
+    try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { place: t.value.trim() } }) }); render(); toast(tr('Gefunden: {0}', S.settings.place)); load(); }
     catch (x) { toast(x.message, true); render(); }
   } else if (t.dataset.bright) {
     const d = dev(r1); setLight(r1, { ...d.cfg.light, v: Number(t.value) });
   } else if (t.dataset.stpin) {
-    const v = stpParse(t.dataset.list, t.value); t.blur(); if (v == null) toast('Bitte eine Zahl eingeben', true); else stpSave(t.dataset.stpin, v);
+    const v = stpParse(t.dataset.list, t.value); t.blur(); if (v == null) toast(tr('Bitte eine Zahl eingeben'), true); else stpSave(t.dataset.stpin, v);
   } else if (t.dataset.schin) {
     const [id, k] = t.dataset.schin.split('|'); t.blur(); updSch(r1, (e) => (e.id === id ? { ...e, [k]: t.value } : e));
   } else if (t.dataset.ain) {
@@ -1357,12 +1379,12 @@ app.addEventListener('change', async (e) => {
   } else if (t.dataset.expIn) { exp[t.dataset.expIn] = t.value; if (exp.from > exp.to) [exp.from, exp.to] = [exp.to, exp.from]; t.blur(); render(); }
   else if (t.dataset.sat) { const s = S.scenes.find((x) => x.id === t.dataset.sat); s.time.at = t.value; t.blur(); saveScenes(); }
   else if (t.dataset.setting) {
-    try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { [t.dataset.setting]: Number(t.value) } }) }); t.blur(); render(); toast('Gespeichert'); } catch (x) { toast(x.message, true); }
+    try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { [t.dataset.setting]: Number(t.value) } }) }); t.blur(); render(); toast(tr('Gespeichert')); } catch (x) { toast(x.message, true); }
   } else if (t.dataset.sceneName) {
-    S.scenes.find((x) => x.id === t.dataset.sceneName).name = t.value.trim() || 'Szene'; t.blur(); saveScenes();
+    S.scenes.find((x) => x.id === t.dataset.sceneName).name = t.value.trim() || tr('Szene'); t.blur(); saveScenes();
   } else if (t.id === 'addip' && t.value.trim()) {
     t.disabled = true;
-    try { const d = await api('api/devices', { method: 'POST', body: JSON.stringify({ ip: t.value.trim() }) }); await load(); toast(`${d.name} hinzugefügt`); } catch (x) { toast(x.message, true); }
+    try { const d = await api('api/devices', { method: 'POST', body: JSON.stringify({ ip: t.value.trim() }) }); await load(); toast(tr('{0} hinzugefügt', d.name)); } catch (x) { toast(x.message, true); }
     t.disabled = false;
   }
 });
@@ -1377,7 +1399,7 @@ app.addEventListener('keydown', (e) => {
 const u8 = (b64) => Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((b64.length + 3) % 4)), (c) => c.charCodeAt(0));
 async function pushEnable() {
   const reg = await navigator.serviceWorker.ready;
-  if (await Notification.requestPermission() !== 'granted') throw new Error('Mitteilungen wurden nicht erlaubt (in den Einstellungen des Handys änderbar).');
+  if (await Notification.requestPermission() !== 'granted') throw new Error(tr('Mitteilungen wurden nicht erlaubt (in den Einstellungen des Handys änderbar).'));
   const { key } = await api('api/push/key');
   let sub = await reg.pushManager.getSubscription();
   if (sub) await sub.unsubscribe();

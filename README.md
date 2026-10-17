@@ -2,7 +2,7 @@
 
 A self-hosted app for **myStrom** smart-home devices on your home network. It does everything the official myStrom app sells as PLUS, PRO, DATA PRO and HOME GUARD, for free, without an account and without the cloud. All data stays on your own server.
 
-It is a small Node.js server (no dependencies) plus a web app you add to your phone's home screen. The user interface is in German.
+It is a small Node.js server (no dependencies) plus a web app you add to your phone's home screen. The user interface is available in German and English (switch it under Settings › Language).
 
 > **Not affiliated with myStrom AG.** "myStrom" is a trademark of myStrom AG. This project only uses the local REST interfaces the devices offer.
 
@@ -102,6 +102,7 @@ All settings are optional environment variables:
 | `TZ` | `Europe/Zurich` | Time zone for schedules and charts |
 | `DEVICES` | – | Comma-separated IPs to add in addition to automatic discovery |
 | `LAN_URL` | first IPv4 address + port | Address under which buttons can reach this server, e.g. `192.168.1.10:8091` |
+| `UI_LANG` | `de` | Initial language, `de` or `en` (changeable in the app) |
 | `TARIFF` | `0.30` | Initial electricity price per kWh (changeable in the app) |
 | `LAT`, `LON` | Zurich | Initial location for sunrise/sunset (changeable in the app) |
 | `PUSH_CONTACT` | `mailto:mystrom-app@example.com` | Contact sent to push services (VAPID) |

@@ -82,7 +82,8 @@ const tr = (de, ...a) => (settings.lang === 'en' ? EN[de] ?? de : de).replace(/\
 function trText(de) {
   if (settings.lang !== 'en' || !de) return de;
   if (EN[de]) return EN[de];
-  for (const [re, en] of EN_PATTERNS) { const m = re.exec(de); if (m) return en.replace(/\{(\d)\}/g, (_, i) => m[Number(i) + 1] ?? ''); }
+  // {0} = capture group as is, {t0} = capture group translated as well (e.g. the reason inside an alarm text)
+  for (const [re, en] of EN_PATTERNS) { const m = re.exec(de); if (m) return en.replace(/\{(t?)(\d)\}/g, (_, t, i) => (t ? trText(m[Number(i) + 1] ?? '') : m[Number(i) + 1] ?? '')); }
   return de;
 }
 delete settings.priceFromSolar; // left over from the former sync with the solar dashboard
@@ -205,7 +206,7 @@ function migrateIdle(c) {
 }
 for (const r of q.devices.all()) devices.set(r.mac, { ...r, cfg: clean(DEFAULT_CFG(), migrateIdle(JSON.parse(r.cfg || '{}'))) });
 const saveDevice = (d) => q.putDevice.run(d.mac, d.ip, d.type, d.fw, JSON.stringify(d.cfg), d.added);
-const nameOf = (d) => d.cfg.name || `${{ bulb: 'Lampe', button: 'Taster', motion: 'Bewegungsmelder' }[kindOf(d)] || 'Steckdose'} ${d.mac.slice(-4)}`;
+const nameOf = (d) => d.cfg.name || `${{ bulb: tr('Lampe'), button: tr('Taster'), motion: tr('Bewegungsmelder') }[kindOf(d)] || tr('Steckdose')} ${d.mac.slice(-4)}`;
 // Runtime state (not persisted): readings, connection errors, rule counters
 const rt = new Map();
 const R = (mac) => { if (!rt.has(mac)) rt.set(mac, { online: false, fails: 0, w: 0, relay: false, temp: null, seen: 0 }); return rt.get(mac); };
@@ -257,7 +258,7 @@ async function addByIp(ip, hint) {
   try { info = await fetch(`http://${ip}/api/v1/info`, { signal: AbortSignal.timeout(4000) }).then((r) => r.json()); }
   catch (e) { if (!hint) throw e; info = { mac: hint.mac, type: hint.type }; } // sleeping button: details from the UDP announcement
   const mac = String(info.mac || '').toUpperCase().replace(/[^0-9A-F]/g, '');
-  if (mac.length !== 12) throw new Error('Unter dieser Adresse antwortet kein myStrom-Gerät.');
+  if (mac.length !== 12) throw new Error(tr('Unter dieser Adresse antwortet kein myStrom-Gerät.'));
   const old = devices.get(mac);
   const d = { mac, ip, type: info.type ?? hint?.type ?? old?.type ?? null, fw: info.version ?? old?.fw ?? null, cfg: old?.cfg || DEFAULT_CFG(), added: old?.added || Date.now() };
   if (!old) logEvent(mac, 'info', `Gefunden unter ${ip}`);
@@ -290,10 +291,10 @@ function logEvent(mac, kind, text) { q.addEvent.run(Date.now(), mac, kind, text)
 // Switch with a reason; the reason shows up in the history and the status ("Aus seit 23:31 · nicht mehr benutzt")
 async function setRelay(mac, on, why) {
   const d = devices.get(mac), r = R(mac);
-  if (!d) throw new Error('Unbekanntes Gerät.');
+  if (!d) throw new Error(tr('Unbekanntes Gerät.'));
   if (kindOf(d) === 'bulb') await devFetch(d, `/api/v1/device/${d.mac}`, 4000, `action=${on ? 'on' : 'off'}&ramp=400`);
   else if (kindOf(d) === 'switch') await devFetch(d, `/relay?state=${on ? 1 : 0}`);
-  else throw new Error(`${nameOf(d)} lässt sich nicht schalten.`);
+  else throw new Error(tr('{0} lässt sich nicht schalten.', nameOf(d)));
   r.expect = { relay: on, until: Date.now() + CFG.pollMs * 2 };
   if (r.relay !== on) edge(d, on, why);
   r.relay = on; if (!on) r.w = 0;
@@ -392,7 +393,7 @@ async function pollAll() {
   for (const d of devices.values()) await runRules(d, prev, lastTick).catch((e) => console.error('Regeln', nameOf(d), e.message));
   // Scenes at fixed times
   const crossed = crossedFn(prev, lastTick);
-  for (const sc of meta('scenes', DEFAULT_SCENES)) {
+  for (const sc of meta('scenes', defaultScenes())) {
     if (sc.time?.on && sc.time.days.includes(weekday(lastTick)) && crossed(hm2min(sc.time.at))) await runScene(sc.id).catch((e) => console.error('Szene', sc.name, e.message));
   }
 }
@@ -533,24 +534,24 @@ async function runAction(d, a) {
 }
 
 // ---------- Status for the app ----------
-const ago = (ts) => { const m = Math.round((Date.now() - ts) / 60e3); return m < 1 ? 'gerade eben' : m < 60 ? `vor ${m} min` : m < 1440 ? `um ${clock(ts)}` : `am ${dShort(dayKey(ts))}`; };
+const ago = (ts) => { const m = Math.round((Date.now() - ts) / 60e3); return m < 1 ? tr('gerade eben') : m < 60 ? tr('vor {0} min', m) : m < 1440 ? tr('um {0}', clock(ts)) : tr('am {0}', dShort(dayKey(ts))); };
 function statusText(d) {
   const r = R(d.mac), c = d.cfg, now = Date.now(), m = minOfDay(now);
-  if (kindOf(d) === 'button') return r.lastPress ? `zuletzt ${ago(r.lastPress.ts)} gedrückt` : r.seen ? `zuletzt aktiv ${ago(r.seen)}` : 'meldet sich nach dem ersten Drücken';
-  if (kindOf(d) === 'motion') { if (!r.online) return r.seen ? `Offline seit ${clock(r.seen)}` : 'Wird verbunden …'; return r.motion ? 'Bewegung' : r.lastMotion ? `Bewegung ${ago(r.lastMotion)}` : 'keine Bewegung'; }
-  if (!r.online) return r.seen ? `Offline seit ${clock(r.seen)}` : 'Wird verbunden …';
+  if (kindOf(d) === 'button') return r.lastPress ? tr('zuletzt {0} gedrückt', ago(r.lastPress.ts)) : r.seen ? tr('zuletzt aktiv {0}', ago(r.seen)) : tr('meldet sich nach dem ersten Drücken');
+  if (kindOf(d) === 'motion') { if (!r.online) return r.seen ? tr('Offline seit {0}', clock(r.seen)) : tr('Wird verbunden …'); return r.motion ? tr('Bewegung') : r.lastMotion ? tr('Bewegung {0}', ago(r.lastMotion)) : tr('keine Bewegung'); }
+  if (!r.online) return r.seen ? tr('Offline seit {0}', clock(r.seen)) : tr('Wird verbunden …');
   const iw = r.relay && idleWatch(c, now);
   if (iw) {
-    if (r.lowSince) return `Unter ${iw.below} W · aus in ${Math.max(1, Math.ceil(iw.mins - (now - r.lowSince) / 60e3))} min`;
-    return `${pw(r.w)} · wartet, du arbeitest noch`;
+    if (r.lowSince) return tr('Unter {0} W · aus in {1} min', iw.below, Math.max(1, Math.ceil(iw.mins - (now - r.lowSince) / 60e3)));
+    return tr('{0} · wartet, du arbeitest noch', pw(r.w));
   }
-  if (r.relay && c.timer.on && r.onSince) return `${pw(r.w)} · Timer, aus um ${clock(r.onSince + c.timer.mins * 60e3)}`;
+  if (r.relay && c.timer.on && r.onSince) return tr('{0} · Timer, aus um {1}', pw(r.w), clock(r.onSince + c.timer.mins * 60e3));
   if (r.relay) return pw(r.w);
   const e = q.lastSwitch.get(d.mac);
-  if (e?.kind === 'off' && now - e.ts < 18 * 3600e3) return `Aus seit ${clock(e.ts)} · ${e.text}`;
+  if (e?.kind === 'off' && now - e.ts < 18 * 3600e3) return tr('Aus seit {0} · {1}', clock(e.ts), trText(e.text));
   const today = dayKey(now);
-  if (c.vacation.on && today < c.vacation.from) return `Aus · Ferien ab ${dShort(c.vacation.from)}`;
-  return 'Aus';
+  if (c.vacation.on && today < c.vacation.from) return tr('Aus · Ferien ab {0}', dShort(c.vacation.from));
+  return tr('Aus');
 }
 // mac: 'all', one device or several comma-separated (A,B) – then the sum of the selected ones
 const macsOf = (mac) => (mac === 'all' ? null : mac.split(','));
@@ -562,20 +563,20 @@ const sinceWh = (mac, ts) => sumOver(mac, () => q.sumWhAll.get(ts).wh, (m) => q.
 function deviceJson(d) {
   const r = R(d.mac), today = dayKey(Date.now());
   return {
-    mac: d.mac, ip: d.ip, type: d.type, kind: kindOf(d), typeName: TYPES[d.type] || `Typ ${d.type}`, fw: d.fw, name: nameOf(d), cfg: d.cfg,
+    mac: d.mac, ip: d.ip, type: d.type, kind: kindOf(d), typeName: TYPES[d.type] || tr('Typ {0}', d.type), fw: d.fw, name: nameOf(d), cfg: d.cfg,
     ...(kindOf(d) === 'bulb' ? { color: r.color || null } : {}),
     ...(kindOf(d) === 'button' ? { voltage: r.voltage ?? null, charge: r.charge ?? null, battery: r.voltage == null ? null : Math.max(0, Math.min(100, Math.round((r.voltage - 3.3) / 0.9 * 100))), lastPress: r.lastPress || null, synced: r.synced === JSON.stringify(buttonUrls(d)), touch: d.type !== 104 } : {}),
     ...(kindOf(d) === 'motion' ? { motion: Boolean(r.motion), light: r.light ?? null, lastMotion: r.lastMotion || null } : {}),
     online: r.online, relay: r.relay, w: r.w, temp: r.temp == null ? null : Math.round((r.temp + d.cfg.tcorr) * 10) / 10, tempRaw: r.temp,
     status: statusText(d), todayWh: sinceWh(d.mac, dayStart(today)), lowSince: r.lowSince || null, onSince: r.onSince || null,
-    vacationToday: vacationSlots(d, today).map((s) => ({ key: s.key, start: min2hm(s.start), end: min2hm(s.end) })),
+    vacationToday: vacationSlots(d, today).map((s) => ({ key: s.key === 'morgens' ? tr('morgens') : tr('abends'), start: min2hm(s.start), end: min2hm(s.end) })),
   };
 }
 function apiState() {
   const today = dayKey(Date.now()), sun = sunTimes(today);
   return {
     settings, now: Date.now(), today, sun: sun && { rise: min2hm(sun.rise), set: min2hm(sun.set) }, demo: CFG.demo,
-    devices: [...devices.values()].map(deviceJson), scenes: meta('scenes', DEFAULT_SCENES), pushSubs: meta('pushSubs', []).length,
+    devices: [...devices.values()].map(deviceJson), scenes: meta('scenes', defaultScenes()), pushSubs: meta('pushSubs', []).length,
   };
 }
 // Daily curve in 5-minute steps (average W), plus total and peak
@@ -600,12 +601,14 @@ function apiTotals(mac) {
   const firsts = mac === 'all' ? [] : macsOf(mac).map((m) => q.firstTs.get(m).ts).filter(Boolean), first = firsts.length ? Math.min(...firsts) : null;
   return { today: sinceWh(mac, dayStart(today)), week: sinceWh(mac, weekStart), month: sinceWh(mac, monthStart), year: sinceWh(mac, yearStart), all: sinceWh(mac, 0), since: first };
 }
+// Short weekday names Monday … Sunday for chart labels
+const weekdayLabels = () => [tr('Mo'), tr('Di'), tr('Mi'), tr('Do'), tr('Fr'), tr('Sa'), tr('So')];
 function apiBars(mac, period, ref) {
   const pad = (n) => String(n).padStart(2, '0'), now = Date.now();
   let buckets;
   if (period === 'week') {
     const wd = (new Date(`${ref}T12:00:00Z`).getUTCDay() + 6) % 7, start = addDays(ref, -wd);
-    buckets = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((label, i) => { const day = addDays(start, i); return { key: day, label, from: dayStart(day), to: dayStart(addDays(day, 1)) }; });
+    buckets = weekdayLabels().map((label, i) => { const day = addDays(start, i); return { key: day, label, from: dayStart(day), to: dayStart(addDays(day, 1)) }; });
   } else if (period === 'month') {
     const ym = ref.slice(0, 7), [y, m] = ym.split('-').map(Number), n = new Date(Date.UTC(y, m, 0)).getUTCDate();
     buckets = Array.from({ length: n }, (_, i) => { const day = `${ym}-${pad(i + 1)}`; return { key: day, label: String(i + 1), from: dayStart(day), to: dayStart(addDays(day, 1)) }; });
@@ -630,7 +633,7 @@ function apiTemp(d, period, ref) {
   const len = period === 'week' ? 7 : new Date(Date.UTC(Number(ref.slice(0, 4)), Number(ref.slice(5, 7)), 0)).getUTCDate();
   const days = Array.from({ length: len }, (_, i) => {
     const day = addDays(start, i), st = q.tempStats.get(d.mac, dayStart(day), dayStart(addDays(day, 1)));
-    return { key: day, label: period === 'week' ? ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'][i] : String(i + 1), min: r1(st.min), max: r1(st.max), avg: r1(st.avg) };
+    return { key: day, label: period === 'week' ? weekdayLabels()[i] : String(i + 1), min: r1(st.min), max: r1(st.max), avg: r1(st.avg) };
   });
   const has = days.filter((x) => x.min != null);
   return { period, ref, days, min: has.length ? Math.min(...has.map((x) => x.min)) : null, max: has.length ? Math.max(...has.map((x) => x.max)) : null,
@@ -644,7 +647,7 @@ function csvExport(mac, from, to, res = 'raw') {
   const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: CFG.tz, timeStyle: 'medium', hourCycle: 'h23' });
   const when = (ts) => `${dayKey(ts)} ${fmt.format(ts)}`;
   if (res === 'raw') {
-    const lines = ['Zeit;Gerät;Leistung W;Energie Wh'];
+    const lines = [tr('Zeit;Gerät;Leistung W;Energie Wh')];
     for (const s of rows) lines.push(`${when(s.ts)};${names[s.mac] || s.mac};${s.w.toFixed(1)};${(s.wh || 0).toFixed(3)}`);
     return lines.join('\n');
   }
@@ -654,7 +657,7 @@ function csvExport(mac, from, to, res = 'raw') {
     const b = step ? Math.floor(s.ts / step) * step : dayStart(dayKey(s.ts)), k = `${b}|${s.mac}`, g = groups.get(k) || { b, mac: s.mac, w: 0, n: 0, wh: 0 };
     g.w += s.w; g.n++; g.wh += s.wh || 0; groups.set(k, g);
   }
-  const lines = [`${res === 'day' ? 'Tag' : 'Zeit'};Gerät;Leistung Ø W;Energie Wh`];
+  const lines = [tr('{0};Gerät;Leistung Ø W;Energie Wh', res === 'day' ? tr('Tag') : tr('Zeit'))];
   for (const g of [...groups.values()].sort((x, y) => x.b - y.b || x.mac.localeCompare(y.mac))) {
     lines.push(`${res === 'day' ? dayKey(g.b) : when(g.b).slice(0, 16)};${names[g.mac] || g.mac};${(g.w / g.n).toFixed(1)};${g.wh.toFixed(2)}`);
   }
@@ -662,18 +665,19 @@ function csvExport(mac, from, to, res = 'raw') {
 }
 
 // ---------- Scenes ----------
-const DEFAULT_SCENES = [{ id: 'alles-aus', name: 'Alles aus', actions: {} }];
+// Initial scene until the first save; its name is stored data from then on
+const defaultScenes = () => [{ id: 'alles-aus', name: tr('Alles aus'), actions: {} }];
 function cleanScenes(list) {
-  if (!Array.isArray(list)) return meta('scenes', DEFAULT_SCENES);
+  if (!Array.isArray(list)) return meta('scenes', defaultScenes());
   return list.slice(0, 30).map((s) => ({
-    id: String(s.id || crypto.randomUUID()).slice(0, 40), name: String(s.name || 'Szene').trim().slice(0, 30) || 'Szene',
+    id: String(s.id || crypto.randomUUID()).slice(0, 40), name: String(s.name || tr('Szene')).trim().slice(0, 30) || tr('Szene'),
     actions: Object.fromEntries(Object.entries(s.actions || {}).filter(([mac, a]) => devices.has(mac) && ['on', 'off'].includes(a))),
     time: clean({ on: false, at: '23:00', days: [1, 2, 3, 4, 5, 6, 0] }, s.time || {}),
   }));
 }
 async function runScene(id) {
-  const s = meta('scenes', DEFAULT_SCENES).find((x) => x.id === id);
-  if (!s) throw new Error('Unbekannte Szene.');
+  const s = meta('scenes', defaultScenes()).find((x) => x.id === id);
+  if (!s) throw new Error(tr('Unbekannte Szene.'));
   const acts = Object.keys(s.actions).length ? s.actions : Object.fromEntries([...devices.values()].filter(switchable).map((x) => [x.mac, 'off'])); // empty = all off
   const errors = [];
   for (const [mac, a] of Object.entries(acts)) {
@@ -737,10 +741,11 @@ async function pushAll(msg) {
   if (error) console.error(new Date().toISOString(), 'Push:', error);
   return { sent, total: subs.length, error };
 }
-// Alarm: into the history and as a notification; tapping opens the socket
+// Alarm: into the history and as a notification; tapping opens the socket.
+// title and body are German (stored like that); the notification itself goes out in the UI language.
 function notify(d, kind, title, body) {
   logEvent(d.mac, 'alarm', body ? `${title}. ${body}` : title);
-  if (!CFG.demo) pushAll({ title, body, url: `./#dev/${d.mac}`, tag: `${kind}-${d.mac}` }).catch(() => {});
+  if (!CFG.demo) pushAll({ title: trText(title), body: trText(body), url: `./#dev/${d.mac}`, tag: `${kind}-${d.mac}` }).catch(() => {});
 }
 
 // ---------- Location: convert a place name to coordinates (Open-Meteo, Switzerland first) ----------
@@ -755,7 +760,7 @@ async function geocode(text) {
     const g = r.ok ? (await r.json())?.results?.[0] : null;
     if (g) return { lat: g.latitude, lon: g.longitude, place: [g.name, g.admin1?.replace(/^Kanton /, ''), g.country_code !== 'CH' ? g.country : null].filter(Boolean).join(', ') };
   }
-  throw new Error(`Ort „${text}“ nicht gefunden. Versuche einen anderen Ortsnamen oder Koordinaten wie 47.46, 8.19.`);
+  throw new Error(tr('Ort „{0}“ nicht gefunden. Versuche einen anderen Ortsnamen oder Koordinaten wie 47.46, 8.19.', text));
 }
 
 // ---------- HTTP ----------
@@ -764,7 +769,7 @@ const PUBLIC = path.join(__dirname, 'public');
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', (c) => { data += c; if (data.length > 100_000) { reject(new Error('zu gross')); req.destroy(); } });
+    req.on('data', (c) => { data += c; if (data.length > 100_000) { reject(new Error(tr('Anfrage zu gross.'))); req.destroy(); } });
     req.on('end', () => { try { resolve(JSON.parse(data || '{}')); } catch (e) { reject(e); } });
   });
 }
@@ -776,18 +781,18 @@ const server = http.createServer(async (req, res) => {
   try {
     if (p === '/api/state') return json(apiState());
     const dm = /^\/api\/devices\/([0-9A-Z]{12})(\/relay)?$/.exec(p), dev = dm && devices.get(dm[1]);
-    if (dm && !dev) return json({ error: 'Unbekanntes Gerät.' }, 404);
+    if (dm && !dev) return json({ error: tr('Unbekanntes Gerät.') }, 404);
     if (dm?.[2] && req.method === 'POST') {
       const b = await readBody(req);
-      if (dev.cfg.lock) return json({ error: 'Tastensperre ist an.' }, 423);
-      if (!R(dev.mac).online) return json({ error: `${nameOf(dev)} ist nicht erreichbar.` }, 503);
+      if (dev.cfg.lock) return json({ error: tr('Tastensperre ist an.') }, 423);
+      if (!R(dev.mac).online) return json({ error: tr('{0} ist nicht erreichbar.', nameOf(dev)) }, 503);
       await setRelay(dev.mac, Boolean(b.on), 'von Hand in der App');
       return json(deviceJson(dev));
     }
     // read-only diagnostics: what the device itself reports (settings, list of firmware endpoints)
     const gm = /^\/api\/devices\/([0-9A-Z]{12})\/diag$/.exec(p);
     if (gm && req.method === 'GET') {
-      const d = devices.get(gm[1]); if (!d) return json({ error: 'Unbekanntes Gerät.' }, 404);
+      const d = devices.get(gm[1]); if (!d) return json({ error: tr('Unbekanntes Gerät.') }, 404);
       if (CFG.demo) return json({ settings: { rest: true, panel: true, hap_disable: false, name: '', temp_offset: 0 }, help: '(Demo)' });
       const get = async (path) => { try { const r = await fetch(`http://${d.ip}${path}`, { signal: AbortSignal.timeout(4000) }); return (await r.text()).slice(0, 8000); } catch (e) { return `! ${e.message}`; } };
       const raw = await get('/api/v1/settings'); let settings; try { settings = JSON.parse(raw); } catch { settings = raw; }
@@ -795,14 +800,14 @@ const server = http.createServer(async (req, res) => {
     }
     const lm = /^\/api\/devices\/([0-9A-Z]{12})\/light$/.exec(p);
     if (lm && req.method === 'POST') {
-      const d = devices.get(lm[1]); if (!d || kindOf(d) !== 'bulb') return json({ error: 'Keine Lampe.' }, 404);
-      if (!R(d.mac).online) return json({ error: `${nameOf(d)} ist nicht erreichbar.` }, 503);
+      const d = devices.get(lm[1]); if (!d || kindOf(d) !== 'bulb') return json({ error: tr('Keine Lampe.') }, 404);
+      if (!R(d.mac).online) return json({ error: tr('{0} ist nicht erreichbar.', nameOf(d)) }, 503);
       await setLight(d.mac, await readBody(req)); return json(deviceJson(d));
     }
     // called by the button (GET) or from the app for testing (POST)
     const bm = /^\/api\/button\/([0-9A-Z]{12})\/(single|double|long|touch)$/.exec(p);
     if (bm) {
-      const d = devices.get(bm[1]); if (!d || kindOf(d) !== 'button') return json({ error: 'Kein Taster.' }, 404);
+      const d = devices.get(bm[1]); if (!d || kindOf(d) !== 'button') return json({ error: tr('Kein Taster.') }, 404);
       await buttonPress(d, bm[2]); return json(deviceJson(d));
     }
     if (dm && req.method === 'PUT') {
@@ -819,31 +824,31 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/devices' && req.method === 'POST') {
       const ip = String((await readBody(req)).ip || '').trim();
-      if (!/^[\w.-]+$/.test(ip)) return json({ error: 'Bitte eine IP-Adresse angeben, z. B. 192.168.0.42.' }, 400);
-      try { const d = await addByIp(ip); await pollDevice(d); return json(deviceJson(d)); } catch (e) { return json({ error: e.name === 'TimeoutError' ? `Unter ${ip} antwortet nichts.` : e.message }, 422); }
+      if (!/^[\w.-]+$/.test(ip)) return json({ error: tr('Bitte eine IP-Adresse angeben, z. B. 192.168.0.42.') }, 400);
+      try { const d = await addByIp(ip); await pollDevice(d); return json(deviceJson(d)); } catch (e) { return json({ error: e.name === 'TimeoutError' ? tr('Unter {0} antwortet nichts.', ip) : e.message }, 422); }
     }
     if (p === '/api/curve') {
       const mac = sp.get('mac') || 'all', day = sp.get('day') || dayKey(Date.now());
-      if (!isDay(day) || !validMac(mac)) return json({ error: 'mac und day (JJJJ-MM-TT) angeben' }, 400);
+      if (!isDay(day) || !validMac(mac)) return json({ error: tr('mac und day (JJJJ-MM-TT) angeben') }, 400);
       return json(apiCurve(mac, day));
     }
     if (p === '/api/bars') {
       const mac = sp.get('mac') || 'all', period = sp.get('period'), ref = sp.get('ref') || dayKey(Date.now());
-      if (!['week', 'month', 'year'].includes(period) || !isDay(ref) || !validMac(mac)) return json({ error: 'period (week|month|year), ref (JJJJ-MM-TT) und mac angeben' }, 400);
+      if (!['week', 'month', 'year'].includes(period) || !isDay(ref) || !validMac(mac)) return json({ error: tr('period (week|month|year), ref (JJJJ-MM-TT) und mac angeben') }, 400);
       return json(apiBars(mac, period, ref));
     }
     if (p === '/api/temp') {
       const d = devices.get(sp.get('mac')), period = sp.get('period') || 'day', ref = sp.get('ref') || dayKey(Date.now());
-      if (!d || !['day', 'week', 'month'].includes(period) || !isDay(ref)) return json({ error: 'mac, period (day|week|month) und ref (JJJJ-MM-TT) angeben' }, 400);
+      if (!d || !['day', 'week', 'month'].includes(period) || !isDay(ref)) return json({ error: tr('mac, period (day|week|month) und ref (JJJJ-MM-TT) angeben') }, 400);
       return json(apiTemp(d, period, ref));
     }
-    if (p === '/api/totals') { const mac = sp.get('mac') || 'all'; if (!validMac(mac)) return json({ error: 'unbekanntes Gerät' }, 400); return json(apiTotals(mac)); }
-    if (p === '/api/events') { const mac = sp.get('mac'); return json(q.events.all(mac, mac, Math.min(200, Number(sp.get('n') || 50)))); }
+    if (p === '/api/totals') { const mac = sp.get('mac') || 'all'; if (!validMac(mac)) return json({ error: tr('unbekanntes Gerät') }, 400); return json(apiTotals(mac)); }
+    if (p === '/api/events') { const mac = sp.get('mac'); return json(q.events.all(mac, mac, Math.min(200, Number(sp.get('n') || 50))).map((e) => ({ ...e, text: trText(e.text) }))); }
     if (p === '/api/export.csv') {
       const mac = sp.get('mac') || 'all', from = sp.get('from'), to = sp.get('to'), step = ['raw', '5min', 'hour', 'day'].includes(sp.get('res')) ? sp.get('res') : 'raw';
-      if (!isDay(from) || !isDay(to) || !validMac(mac)) return json({ error: 'from und to als JJJJ-MM-TT und bekannte Geräte angeben' }, 400);
-      const name = mac === 'all' ? 'alle' : macsOf(mac).map((m) => nameOf(devices.get(m))).join('+').replace(/[^\w+-]+/g, '_');
-      res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="steckdosen-${name}-${from}-${to}-${step === 'raw' ? '30s' : step}.csv"` });
+      if (!isDay(from) || !isDay(to) || !validMac(mac)) return json({ error: tr('from und to als JJJJ-MM-TT und bekannte Geräte angeben') }, 400);
+      const name = mac === 'all' ? tr('alle') : macsOf(mac).map((m) => nameOf(devices.get(m))).join('+').replace(/[^\w+-]+/g, '_');
+      res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${tr('steckdosen')}-${name}-${from}-${to}-${step === 'raw' ? '30s' : step}.csv"` });
       return res.end(`\ufeff${csvExport(mac, from, to, step)}`);
     }
     if (p === '/api/scenes' && req.method === 'PUT') { const s = cleanScenes((await readBody(req)).scenes); setMeta('scenes', s); return json(s); }
@@ -855,7 +860,7 @@ const server = http.createServer(async (req, res) => {
       if (b.lang === 'de' || b.lang === 'en') next.lang = b.lang;
       if (Array.isArray(b.order)) next.order = [...new Set(b.order.map(String).filter((k) => /^[\w-]{1,24}$/.test(k)))].slice(0, 60);
       if (typeof b.place === 'string' && b.place.trim()) {
-        try { next = { ...next, ...(await geocode(b.place.trim().slice(0, 80))) }; } catch (e) { return json({ error: e.name === 'TimeoutError' ? 'Die Ortssuche antwortet nicht.' : e.message }, 422); }
+        try { next = { ...next, ...(await geocode(b.place.trim().slice(0, 80))) }; } catch (e) { return json({ error: e.name === 'TimeoutError' ? tr('Die Ortssuche antwortet nicht.') : e.message }, 422); }
       } else if (b.lat != null && b.lon != null) next.place = b.place ?? `${Number(b.lat).toFixed(2)}, ${Number(b.lon).toFixed(2)}`;
       settings = next; setMeta('settings', settings);
       return json(settings);
@@ -863,7 +868,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/push/key') return json({ key: vapidKeys().pub });
     if (p === '/api/push/subscribe' && req.method === 'POST') {
       const b = await readBody(req), ep = String(b.endpoint || '');
-      if (!/^https:\/\//.test(ep) || !b.keys?.p256dh || !b.keys?.auth) return json({ error: 'Ungültiges Abo.' }, 400);
+      if (!/^https:\/\//.test(ep) || !b.keys?.p256dh || !b.keys?.auth) return json({ error: tr('Ungültiges Abo.') }, 400);
       const subs = meta('pushSubs', []).filter((x) => x.endpoint !== ep);
       subs.push({ endpoint: ep, keys: { p256dh: String(b.keys.p256dh), auth: String(b.keys.auth) }, created: Date.now() });
       setMeta('pushSubs', subs.slice(-10));
@@ -875,7 +880,7 @@ const server = http.createServer(async (req, res) => {
       return json({ ok: true });
     }
     if (p === '/api/push/test' && req.method === 'POST') {
-      const r = await pushAll({ title: 'Test von myStrom', body: 'So sehen Alarme aus. Antippen öffnet die App.', url: './', tag: 'test' });
+      const r = await pushAll({ title: tr('Test von myStrom'), body: tr('So sehen Alarme aus. Antippen öffnet die App.'), url: './', tag: 'test' });
       return json(r, r.sent ? 200 : 422);
     }
     if (p === '/healthz') return json({ ok: true, devices: devices.size });
@@ -887,7 +892,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(body);
   } catch (e) {
-    if (e?.code === 'ENOENT' || e?.code === 'EISDIR') { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Nicht gefunden'); }
+    if (e?.code === 'ENOENT' || e?.code === 'EISDIR') { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end(tr('Nicht gefunden')); }
     console.error(e); json({ error: String(e.message || e) }, 500);
   }
 });

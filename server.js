@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import crypto from 'node:crypto';
 import os from 'node:os';
+import { EN, EN_PATTERNS } from './i18n-server.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const env = process.env;
@@ -28,7 +29,7 @@ const CFG = {
   lanUrl: env.LAN_URL || '',
 };
 
-const DEFAULT_SETTINGS = { price: Number(env.TARIFF || 0.30), lat: Number(env.LAT || 47.37), lon: Number(env.LON || 8.54), place: '' };
+const DEFAULT_SETTINGS = { price: Number(env.TARIFF || 0.30), lat: Number(env.LAT || 47.37), lon: Number(env.LON || 8.54), place: '', lang: env.UI_LANG === 'en' ? 'en' : 'de' };
 const TYPES = { 101: 'WiFi Switch CH v1', 106: 'WiFi Switch CH v2', 107: 'WiFi Switch EU', 120: 'WiFi Switch Zero', 125: 'WiFi Switch CH v2',
   102: 'WiFi Bulb', 105: 'WiFi LED Strip', 103: 'WiFi Button Plus', 104: 'WiFi Button', 118: 'WiFi Button Plus (2. Gen.)', 110: 'WiFi Motion Sensor' };
 // Device kind: switch (socket), bulb (bulb, LED strip), button (button), motion (motion sensor)
@@ -75,6 +76,15 @@ const q = {
 const meta = (k, fallback) => { const r = q.getMeta.get(k); return r ? JSON.parse(r.value) : fallback; };
 const setMeta = (k, v) => q.setMeta.run(k, JSON.stringify(v));
 let settings = { ...DEFAULT_SETTINGS, ...meta('settings', {}) };
+// UI language for texts the server writes (status, errors, notifications). German is the source text and the key;
+// {0}, {1} … are placeholders. Stored history stays German and is translated when read (trText).
+const tr = (de, ...a) => (settings.lang === 'en' ? EN[de] ?? de : de).replace(/\{(\d)\}/g, (_, i) => a[i] ?? '');
+function trText(de) {
+  if (settings.lang !== 'en' || !de) return de;
+  if (EN[de]) return EN[de];
+  for (const [re, en] of EN_PATTERNS) { const m = re.exec(de); if (m) return en.replace(/\{(\d)\}/g, (_, i) => m[Number(i) + 1] ?? ''); }
+  return de;
+}
 delete settings.priceFromSolar; // left over from the former sync with the solar dashboard
 
 // ---------- Time in the home's time zone ----------
@@ -842,6 +852,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/settings' && req.method === 'PUT') {
       const b = (await readBody(req)).settings || {};
       let next = { ...settings, ...clean({ price: settings.price, lat: settings.lat, lon: settings.lon }, b) };
+      if (b.lang === 'de' || b.lang === 'en') next.lang = b.lang;
       if (Array.isArray(b.order)) next.order = [...new Set(b.order.map(String).filter((k) => /^[\w-]{1,24}$/.test(k)))].slice(0, 60);
       if (typeof b.place === 'string' && b.place.trim()) {
         try { next = { ...next, ...(await geocode(b.place.trim().slice(0, 80))) }; } catch (e) { return json({ error: e.name === 'TimeoutError' ? 'Die Ortssuche antwortet nicht.' : e.message }, 422); }

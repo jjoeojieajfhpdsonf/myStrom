@@ -15,6 +15,11 @@ const addDays = (day, n) => { const d = new Date(`${day}T12:00:00Z`); d.setUTCDa
 const MONTHS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 const dayLabel = (day) => (day === S.today ? 'Heute' : day === addDays(S.today, -1) ? 'Gestern' : `${Number(day.slice(8))}. ${MONTHS[Number(day.slice(5, 7)) - 1]}`);
 const dev = (mac) => S.devices.find((d) => d.mac === mac);
+// UI language (setting on the server): German is the source text and the key, English comes from I18N_EN (i18n.js);
+// {0}, {1} … are placeholders, e.g. tr('Aus seit {0}', clock)
+const lang = () => (S?.settings?.lang === 'en' ? 'en' : 'de');
+const tr = (de, ...a) => (lang() === 'en' ? I18N_EN[de] ?? de : de).replace(/\{(\d)\}/g, (_, i) => a[i] ?? '');
+const LOC = () => (lang() === 'en' ? 'en-GB' : 'de-CH');
 // switchable and with consumption: plugs and bulbs (not buttons, motion sensors)
 const canSwitch = (d) => d.kind === 'switch' || d.kind === 'bulb';
 const SW = () => S.devices.filter(canSwitch);
@@ -953,6 +958,7 @@ function moreHTML() {
       ${'geolocation' in navigator ? row('Standort vom Handy übernehmen', chev(), 'einmalig, nach deiner Freigabe', 'data-geo="1"') : ''}</div>
     <p class="note">Nur für Sonnenauf- und -untergang. Ein eingetippter Ort wird einmal bei Open-Meteo nachgeschlagen; vom Handy kommen die Koordinaten direkt.</p>
     <p class="sec">Design</p><div class="chips">${[['modern', 'Modern'], ['mystrom', 'myStrom']].map(([v, l]) => `<button type="button" class="chip" data-design="${v}" aria-pressed="${design() === v}">${l}</button>`).join('')}</div>
+    <p class="sec">Sprache · Language</p><div class="chips">${[['de', 'Deutsch'], ['en', 'English']].map(([v, l]) => `<button type="button" class="chip" data-lang="${v}" aria-pressed="${lang() === v}">${l}</button>`).join('')}</div>
     <p class="sec">Geräte</p><div class="ls">${S.devices.map((d) => row(esc(d.name), chev(esc(d.ip)), `${esc(d.typeName)} · ${d.online ? 'erreichbar' : 'offline'}`, `data-go="dev/${d.mac}/settings"`)).join('')}
       ${lrow('Per IP hinzufügen', '<input type="text" id="addip" placeholder="192.168.0.42" inputmode="decimal" style="background:#2a2a2a;color:#e8e8e8;padding:7px 9px;text-align:left;max-width:160px">')}</div>
     <p class="note">Neue myStrom-Geräte im WLAN (Steckdosen, Lampen, Taster, Bewegungsmelder) findet die App von selbst. Eine IP brauchst du nur, wenn sich eines nicht meldet; Taster melden sich nach dem ersten Drücken.</p>
@@ -980,6 +986,7 @@ function morph(a, b) {
 }
 function render(fresh = false) {
   if (!S || swipe || drag || hdrag || stpHold || document.activeElement?.classList.contains('stpin')) return;
+  document.documentElement.lang = lang();
   const [r0, r1, r2, r3] = route(), d = r0 === 'dev' ? dev(r1) : null;
   let html;
   if (r0 === 'dev') html = !d ? `${HD('Steckdose', 'home')}<p class="empty-state">Diese Steckdose gibt es nicht mehr.</p>` : r2 ? featureHTML(d, r2, r3) : deviceHTML(d);
@@ -1245,6 +1252,10 @@ app.addEventListener('click', async (e) => {
   else if ((el = at('[data-exp-range]'))) { [exp.from, exp.to] = el.dataset.expRange.split('|'); render(); }
   else if ((el = at('[data-exp-res]'))) { exp.res = el.dataset.expRes; render(); }
   else if ((el = at('[data-design]'))) { haptic(); setDesign(el.dataset.design); }
+  else if ((el = at('[data-lang]'))) {
+    haptic(); S.settings.lang = el.dataset.lang; render();
+    try { S.settings = await api('api/settings', { method: 'PUT', body: JSON.stringify({ settings: { lang: el.dataset.lang } }) }); await load(); } catch (x) { toast(x.message, true); }
+  }
   else if (at('[data-orderreset]')) { haptic(); saveOrder([]); }
   else if ((el = at('[data-stime]'))) { haptic(); const s = S.scenes.find((x) => x.id === el.dataset.stime); s.time.on = !s.time.on; saveScenes(); }
   else if ((el = at('[data-sday]'))) { const [id, n] = el.dataset.sday.split('|'), s = S.scenes.find((x) => x.id === id), k = Number(n); s.time.days = s.time.days.includes(k) ? s.time.days.filter((x) => x !== k) : [...s.time.days, k]; saveScenes(); }

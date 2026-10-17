@@ -65,6 +65,22 @@ DEMO=1 PORT=8095 DB_PATH=/tmp/demo.db node server.js
 
 Open the app on your phone and choose "Add to Home Screen". On the iPhone, push notifications only work from the home-screen app, and they need HTTPS, for example via `tailscale serve` or a reverse proxy.
 
+### Deploy hook (optional)
+
+`tools/deploy-hook.py` lets you update the server with one HTTP call: `POST /deploy` fetches `origin/main`, resets the checkout to it (also after a rewritten history), rebuilds the container and waits until the app answers again, streaming the output. It runs on the host as a systemd service, listens on `127.0.0.1` only and needs a secret token. Set it up once on the server:
+
+```bash
+sh tools/install-deploy-hook.sh
+```
+
+The script creates the token, installs the service and, if Tailscale is installed, makes the hook reachable in your tailnet (`tailscale serve`, port 8444). It prints the URL and the token. Then, after every push:
+
+```bash
+curl -N -X POST -H "Authorization: Bearer <token>" https://<your-server>.ts.net:8444/deploy
+```
+
+`GET /deploy` with the same token shows the last run. Only tracked files are reset; `data/` and `.env` stay untouched.
+
 ### Configuration
 
 All settings are optional environment variables:

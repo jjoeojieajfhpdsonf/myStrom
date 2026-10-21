@@ -186,3 +186,26 @@ body::before { background: var(--top); }
 .tile.info.act .sub { color: var(--on-chiptxt); }
 /* device diagnostics: raw endpoint list of the firmware */
 .diag { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(--mut); margin: 0 4px 24px; }
+
+/* schedule: one card per group of days, times as text, a thin 24 h line below */
+.schgrps { display: grid; gap: 10px; }
+.schgrps.dim { opacity: .5; }
+.schgrp { display: block; width: 100%; text-align: left; background: var(--tile, #171b21); border-radius: 18px; padding: 14px 14px 12px; color: inherit; }
+.schgrp:active { transform: scale(.99); }
+.schd { display: flex; justify-content: space-between; color: var(--mut); font-size: 13px; margin-bottom: 6px; }
+.scht { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 18px; font-variant-numeric: tabular-nums; }
+.scht i { font-style: normal; color: var(--mut); font-size: 12.5px; }
+.scht .mut { color: var(--mut); font-size: 15px; }
+.schtl { display: block; position: relative; height: 4px; border-radius: 2px; background: rgb(255 255 255 / .07); margin: 12px 0 5px; }
+.schtl i { position: absolute; top: 0; bottom: 0; border-radius: 2px; background: var(--on-ico, #8cc865); }
+.schtl i.soft { background: linear-gradient(90deg, var(--on-ico, #8cc865) 70%, transparent); }
+.schtl b { position: absolute; top: -3px; width: 10px; height: 10px; border-radius: 50%; background: #e3a25c; transform: translateX(-50%); box-shadow: 0 0 0 3px var(--tile, #171b21); }
+.schax { display: flex; justify-content: space-between; color: var(--mut); opacity: .6; font-size: 10.5px; }
+.sblk { gap: 8px; }
+.sblk input[type="time"] { width: 78px; min-width: 0; text-align: center; padding-left: 6px; padding-right: 6px; }
+.sblk input[type="time"]::-webkit-calendar-picker-indicator { display: none; }
+.sblk .dash { color: var(--mut); }
+.sblk .chip { white-space: nowrap; min-height: 32px; padding: 4px 10px; font-size: 12.5px; margin-left: auto; }
+.sblk .x { width: 30px; height: 30px; border-radius: 50%; color: var(--mut); font-size: 20px; line-height: 1; flex: none; }
+.sblk .x:active { color: var(--red, #ff5a4e); }
+.chips .chip.taken { opacity: .4; }

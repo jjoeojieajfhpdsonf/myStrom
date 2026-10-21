@@ -147,7 +147,11 @@ function featInfo(d, k) {
   const c = d.cfg;
   switch (k) {
     case 'motion': { const n = nDev(c.motion.targets.filter((m) => dev(m)).length); return [c.motion.on, tr('{0} · aus nach {1}', c.motion.dark ? tr('{0}, wenn dunkel', n) : n, dur(c.motion.mins))]; }
-    case 'schedule': { const e = c.schedule.entries; return [c.schedule.on, e.length === 1 ? (e[0].idle ? tr('{0}–{1} oder später', e[0].start, e[0].end) : `${e[0].start}–${e[0].end} · ${daysText(e[0].days)}`) : tr('{0} Zeitpläne · {1}', e.length, daysText(e.flatMap((x) => x.days)))]; }
+    case 'schedule': {
+      const e = c.schedule.entries.filter((x) => x.days.length), b = e.flatMap((x) => x.blocks);
+      if (e.length === 1 && b.length === 1) return [c.schedule.on, b[0].idle ? tr('{0}–{1} oder später', b[0].start, b[0].end) : `${b[0].start}–${b[0].end} · ${daysText(e[0].days)}`];
+      return [c.schedule.on, tr('{0} Zeiten · {1}', b.length, daysText(e.flatMap((x) => x.days)))];
+    }
     case 'vacation': return [c.vacation.on, `${dShort(c.vacation.from)}–${dShort(c.vacation.to)}`];
     case 'sun': return [c.sun.on || c.sun.off, [c.sun.on && tr('abends an'), c.sun.off && tr('morgens aus')].filter(Boolean).join(', ')];
     case 'timer': return [c.timer.on, tr('nach {0} aus', c.timer.mins < 60 ? `${c.timer.mins} min` : `${c.timer.mins / 60} h`)];
@@ -525,6 +529,33 @@ async function setLight(mac, l) {
   const d = dev(mac); d.cfg.light = { ...d.cfg.light, ...l }; d.relay = true; d.color = `${d.cfg.light.h};${d.cfg.light.s};${d.cfg.light.v}`; render();
   try { Object.assign(d, await api(`api/devices/${mac}/light`, { method: 'POST', body: JSON.stringify(d.cfg.light) })); render(); } catch (e) { toast(e.message, true); load(); }
 }
+// schedule helpers: work on a copy of the groups, keep each group's blocks sorted by start
+const updEntries = (mac, fn) => saveCfg(mac, { schedule: { entries: fn(dev(mac).cfg.schedule.entries.map((e) => ({ ...e, days: [...e.days], blocks: e.blocks.map((b) => ({ ...b })) }))) } });
+const updGroup = (mac, gid, fn) => updEntries(mac, (es) => es.map((e) => { if (e.id !== gid) return e; fn(e); e.blocks.sort((a, b) => a.start.localeCompare(b.start)); return e; }));
+const hmH = (t) => { const [h, m] = t.split(':').map(Number); return h + m / 60; };
+// thin 24 h line under a group: on-times, a fading end for "or later", a dot for now when today belongs to the group
+function schTimeline(e) {
+  const now = new Date(), nowH = now.getHours() + now.getMinutes() / 60, pc = (h) => `${(h / 24) * 100}%`;
+  const seg = (b) => { const s0 = hmH(b.start), e0 = hmH(b.end) <= s0 ? 24 : hmH(b.end); return `<i class="${b.idle ? 'soft' : ''}" style="left:${pc(s0)};width:${pc(e0 - s0)}"></i>`; };
+  return `<span class="schtl">${e.blocks.map(seg).join('')}${e.days.includes(now.getDay()) ? `<b style="left:${pc(nowH)}"></b>` : ''}</span><span class="schax"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></span>`;
+}
+// one group: its days and on-times
+function scheduleGroupHTML(d, gid) {
+  const s = d.cfg.schedule, g = s.entries.find((e) => e.id === gid), back = `dev/${d.mac}/schedule`;
+  if (!g) return HD(tr('Zeitplan'), back) + `<p class="empty-state">${tr('Diese Zeiten gibt es nicht mehr.')}</p>`;
+  const taken = (n) => s.entries.some((e) => e.id !== gid && e.days.includes(n));
+  return HD(esc(g.days.length ? daysText(g.days) : tr('Keine Tage')), back, '<span></span>', esc(d.name))
+    + `<p class="sec">${tr('Tage')}</p><div class="chips days">${WD().map(([n, l]) => `<button type="button" class="chip ${taken(n) ? 'taken' : ''}" data-sgday="${gid}|${n}" aria-pressed="${g.days.includes(n)}">${l}</button>`).join('')}</div>
+    ${WD().some(([n]) => taken(n)) ? `<p class="note">${tr('Blasse Tage haben andere Zeiten; antippen holt sie hierher.')}</p>` : ''}
+    <p class="sec">${tr('Ein – Aus')}</p><div class="ls">${g.blocks.length ? g.blocks.map((b, i) => `<div class="row sblk">
+        <input type="time" data-sbt="${gid}|${i}|start" value="${b.start}" aria-label="${tr('Ein um')}"><span class="dash">–</span><input type="time" data-sbt="${gid}|${i}|end" value="${b.end}" aria-label="${tr('Aus um')}">
+        <button type="button" class="chip" data-sbi="${gid}|${i}" aria-pressed="${b.idle}" title="${tr('Erst aus, wenn nicht mehr benutzt')}">${tr('oder später')}</button>
+        <button type="button" class="x" data-sbx="${gid}|${i}" aria-label="${tr('Zeit entfernen')}">×</button></div>`).join('') : `<div class="row"><span class="tx"><span>${tr('ganzer Tag aus')}</span></span></div>`}</div>
+    <button type="button" class="btn ghost" data-sbadd="${gid}">＋ ${tr('Zeit hinzufügen')}</button>
+    ${g.blocks.some((b) => b.idle) ? `<p class="sec">${tr('Oder später')}</p><div class="ls">${srow(tr('Aus, sobald unter'), stepper(`sch:${gid}:below`, 'watt1', g.below, tr('Aus, sobald unter')), tr('jetzt {0}', pw(d.w)))}${srow(tr('So lange'), stepper(`sch:${gid}:mins`, 'dur240', g.mins, tr('So lange')), tr('am Stück'))}</div>
+      <p class="note">${tr('Mit «oder später» geht die Steckdose ab der Aus-Zeit erst aus, wenn niemand mehr dran arbeitet.')}</p>` : ''}
+    ${s.entries.length > 1 ? `<button type="button" class="btn danger" data-sgdel="${gid}">${tr('Diese Zeiten entfernen')}</button>` : ''}`;
+}
 const updSch = (mac, fn) => saveCfg(mac, { schedule: { entries: dev(mac).cfg.schedule.entries.map(fn).filter(Boolean) } });
 const updAct = (mac, id, patch) => saveCfg(mac, { actions: dev(mac).cfg.actions.map((a) => (a.id === id ? { ...a, ...patch } : a)) });
 function featureHTML(d, k, sub) {
@@ -543,18 +574,17 @@ function featureHTML(d, k, sub) {
         ${a.do !== 'none' ? `<button type="button" class="btn grey" data-btntest="${sub}">${tr('Jetzt ausprobieren')}</button>` : ''}`;
     }
     case 'schedule': {
-      // per schedule: on, off, days. Days of another schedule can't be chosen here (each day only once)
-      const s = c.schedule, taken = (id) => s.entries.filter((e) => e.id !== id).flatMap((e) => e.days), free = WD().filter(([n]) => !s.entries.some((e) => e.days.includes(n)));
-      return head + `<p class="intro">${tr('Schaltet zu festen Zeiten ein und aus. Für andere Tage mit anderen Zeiten fügst du einen weiteren Zeitplan hinzu.')}</p>
+      // groups of days with the same on-times (any number per day); each day belongs to at most one group
+      if (sub) return scheduleGroupHTML(d, sub);
+      const s = c.schedule, free = WD().map(([n]) => n).filter((n) => !s.entries.some((e) => e.days.includes(n)));
+      return head + `<p class="intro">${tr('Schaltet zu festen Zeiten ein und aus, beliebig oft am Tag. Tage mit gleichen Zeiten stehen zusammen.')}</p>
       ${s.on && /wartet|aus in|waiting|off in/i.test(d.status) ? `<p class="note"><b>${tr('Jetzt:')}</b> ${esc(d.status)}</p>` : ''}
       <div class="${dim(s.on)}">${master(d, 'schedule')}</div>
-      ${s.entries.map((e, i) => `<p class="sec">${s.entries.length > 1 ? `${tr('Zeitplan {0}', i + 1)} · ` : ''}${daysText(e.days)}</p>
-        <div class="${dim(s.on)}">${lrow(tr('Ein um'), `<input type="time" data-schin="${e.id}|start" value="${e.start}">`)}${lrow(e.idle ? tr('Aus ab') : tr('Aus um'), `<input type="time" data-schin="${e.id}|end" value="${e.end}">`)}
-          <div class="row"><span class="tx"><b>${tr('Erst aus, wenn nicht mehr benutzt')}</b><span>${tr('wartet, solange du noch dran arbeitest')}</span></span><button type="button" class="sw" data-schsw="${e.id}" aria-pressed="${e.idle}" aria-label="${tr('Erst aus, wenn nicht mehr benutzt')}"></button></div>
-          ${e.idle ? `${srow(tr('Unter'), stepper(`sch:${e.id}:below`, 'watt1', e.below, tr('Unter')), tr('jetzt {0}', pw(d.w)))}${srow(tr('So lange'), stepper(`sch:${e.id}:mins`, 'dur240', e.mins, tr('So lange')), tr('am Stück'))}` : ''}
-          ${s.entries.length > 1 ? `<button type="button" class="row delrow" data-schdel="${e.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg><span>${tr('Zeitplan entfernen')}</span></button>` : ''}</div>
-        <div class="chips days">${WD().filter(([n]) => !taken(e.id).includes(n)).map(([n, l]) => `<button type="button" class="chip" data-schday="${e.id}|${n}" aria-pressed="${e.days.includes(n)}">${l}</button>`).join('')}</div>`).join('')}
-      ${free.length ? `<button type="button" class="btn ghost" data-schadd="1">＋ ${tr('Zeitplan hinzufügen')}</button>` : ''}`;
+      <p class="sec">${tr('Wann an')}</p><div class="schgrps ${s.on ? '' : 'dim'}">${s.entries.filter((e) => e.days.length).map((e) => `<button type="button" class="schgrp" data-go="dev/${d.mac}/schedule/${e.id}">
+        <span class="schd"><span>${esc(daysText(e.days))}</span><span aria-hidden="true">›</span></span>
+        <span class="scht">${e.blocks.length ? e.blocks.map((b) => `<span>${b.start} – ${b.end}${b.idle ? ` <i>${tr('oder später')}</i>` : ''}</span>`).join('') : `<span class="mut">${tr('ganzer Tag aus')}</span>`}</span>
+        ${schTimeline(e)}</button>`).join('')}</div>
+      ${free.length ? `<button type="button" class="btn ghost" data-sgadd="1">＋ ${tr('Zeiten für {0}', daysText(free))}</button>` : ''}`;
     }
     case 'vacation': {
       const v = c.vacation, todayTxt = d.vacationToday.map((s) => `${slotName(s.key)} ${s.start}–${s.end}`).join(', ');
@@ -1330,17 +1360,26 @@ app.addEventListener('click', async (e) => {
     saveCfg(r1, { motion: { targets: t.includes(m) ? t.filter((x) => x !== m) : [...t, m] } });
   } else if ((el = at('[data-swatch]'))) {
     haptic(); const [h, sat] = el.dataset.swatch.split('|').map(Number); setLight(r1, { h, s: sat, v: dev(r1).cfg.light.v });
-  } else if ((el = at('[data-schsw]'))) {
-    haptic(); const id = el.dataset.schsw; el.setAttribute('aria-pressed', el.getAttribute('aria-pressed') !== 'true');
-    updSch(r1, (e) => (e.id === id ? { ...e, idle: !e.idle } : e));
-  } else if ((el = at('[data-schday]'))) {
-    haptic(); const [id, n] = el.dataset.schday.split('|'), k = Number(n);
-    updSch(r1, (e) => (e.id === id ? { ...e, days: e.days.includes(k) ? e.days.filter((x) => x !== k) : [...e.days, k] } : e));
-  } else if (at('[data-schadd]')) {
-    // a new schedule gets all remaining free days
-    haptic(); const sc = dev(r1).cfg.schedule, used = sc.entries.flatMap((e) => e.days), last = sc.entries[sc.entries.length - 1];
-    saveCfg(r1, { schedule: { entries: [...sc.entries, { id: `s${Date.now().toString(36)}`, start: last?.start || '07:00', end: last?.end || '23:00', days: WD().map(([n]) => n).filter((n) => !used.includes(n)) }] } });
-  } else if ((el = at('[data-schdel]'))) { haptic(); updSch(r1, (e) => (e.id === el.dataset.schdel ? null : e)); }
+  } else if ((el = at('[data-sgday]'))) {
+    // a day added here leaves its old group; removed, it has no times until another group takes it
+    haptic(); const [gid, n] = el.dataset.sgday.split('|'), k = Number(n);
+    updEntries(r1, (es) => { const g = es.find((e) => e.id === gid), add = !g.days.includes(k); es.forEach((e) => { e.days = e.days.filter((x) => x !== k); }); if (add) g.days.push(k); return es; });
+  } else if ((el = at('[data-sbi]'))) {
+    haptic(); const [gid, i] = el.dataset.sbi.split('|'); updGroup(r1, gid, (g) => { g.blocks[i].idle = !g.blocks[i].idle; });
+  } else if ((el = at('[data-sbx]'))) {
+    haptic(); const [gid, i] = el.dataset.sbx.split('|'); updGroup(r1, gid, (g) => { g.blocks.splice(Number(i), 1); });
+  } else if ((el = at('[data-sbadd]'))) {
+    // the next on-time starts an hour after the last one ends
+    haptic(); const gid = el.dataset.sbadd;
+    updGroup(r1, gid, (g) => { const last = g.blocks[g.blocks.length - 1], h = last ? Math.min(21, Math.floor(hmH(last.end)) + 1) : 7, t = (x) => `${String(x).padStart(2, '0')}:00`; g.blocks.push({ start: t(h), end: t(h + 2), idle: false }); });
+  } else if (at('[data-sgadd]')) {
+    // new group for the days that have no times yet
+    haptic(); const used = dev(r1).cfg.schedule.entries.flatMap((e) => e.days), id = `s${Date.now().toString(36)}`;
+    updEntries(r1, (es) => [...es.filter((e) => e.days.length), { id, days: WD().map(([n]) => n).filter((n) => !used.includes(n)), blocks: [{ start: '07:00', end: '22:00', idle: false }], below: 25, mins: 10 }]);
+    go(`dev/${r1}/schedule/${id}`);
+  } else if ((el = at('[data-sgdel]'))) {
+    haptic(); const gid = el.dataset.sgdel; updEntries(r1, (es) => es.filter((e) => e.id !== gid)); back(`dev/${r1}/schedule`);
+  }
   else if ((el = at('[data-dayshift]'))) { view.day = shiftPeriod(view.period, view.day, Number(el.dataset.dayshift)); if (view.day > S.today) view.day = S.today; render(); }
   else if (at('[data-devsel]')) { haptic(); openDevPick(); }
   else if (at('[data-menu]')) { haptic(); openMenu(); }
@@ -1388,8 +1427,8 @@ app.addEventListener('change', async (e) => {
     const d = dev(r1); setLight(r1, { ...d.cfg.light, v: Number(t.value) });
   } else if (t.dataset.stpin) {
     const v = stpParse(t.dataset.list, t.value); t.blur(); if (v == null) toast(tr('Bitte eine Zahl eingeben'), true); else stpSave(t.dataset.stpin, v);
-  } else if (t.dataset.schin) {
-    const [id, k] = t.dataset.schin.split('|'); t.blur(); updSch(r1, (e) => (e.id === id ? { ...e, [k]: t.value } : e));
+  } else if (t.dataset.sbt) {
+    const [gid, i, k] = t.dataset.sbt.split('|'); t.blur(); if (/^\d{2}:\d{2}$/.test(t.value)) updGroup(r1, gid, (g) => { g.blocks[i][k] = t.value; });
   } else if (t.dataset.ain) {
     const v = t.type === 'number' ? Number(t.value) : t.value.trim(); t.blur(); updAct(r1, route()[3], { [t.dataset.ain]: v });
   } else if (t.dataset.expIn) { exp[t.dataset.expIn] = t.value; if (exp.from > exp.to) [exp.from, exp.to] = [exp.to, exp.from]; t.blur(); render(); }

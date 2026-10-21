@@ -128,7 +128,8 @@ const DEFAULT_CFG = () => {
     actions: [], // Power Actions: if above/below X W, then …
     // several schedules with their own times; each weekday (0 = Sun … 6 = Sat) belongs to at most one
     // idle: only off once no longer in use (under `below` W for `mins` minutes), instead of exactly at "off at"
-    schedule: { on: false, entries: [{ id: 's1', start: '07:00', end: '23:00', days: [1, 2, 3, 4, 5, 6, 0], idle: false, below: 25, mins: 10 }] },
+    // groups of weekdays with the same on-times; a block with idle waits after `end` until the plug is no longer used (below W for mins)
+    schedule: { on: false, entries: [{ id: 's1', days: [1, 2, 3, 4, 5, 6, 0], blocks: [{ start: '07:00', end: '23:00', idle: false }], below: 25, mins: 10 }] },
     temp: { on: false, max: 45 },
     sun: { on: false, off: false, onOffset: 0, offOffset: 0 },
     vacation: { on: false, from: today, to: addDays(today, 7), morning: { on: true, from: '06:30', to: '07:30' }, evening: { on: true, from: '19:00', to: '22:30' } },
@@ -173,8 +174,10 @@ function cleanSchedule(v) {
     const days = [...new Set((Array.isArray(e.days) ? e.days : [1, 2, 3, 4, 5, 6, 0]).map(Number))].filter((x) => Number.isInteger(x) && x >= 0 && x <= 6 && !used.has(x));
     days.forEach((x) => used.add(x));
     const num = (x, lo, hi, d) => (Number.isFinite(Number(x)) ? Math.min(hi, Math.max(lo, Number(x))) : d);
-    return { id: /^[\w-]{1,16}$/.test(e.id) ? e.id : `s${i + 1}`, start: hm(e.start, '07:00'), end: hm(e.end, '23:00'), days,
-      idle: Boolean(e.idle), below: num(e.below, 0, 3000, 25), mins: Math.round(num(e.mins, 1, 240, 10)) };
+    // older form: one start/end per entry becomes its single block
+    const src = Array.isArray(e.blocks) ? e.blocks : [{ start: e.start, end: e.end, idle: e.idle }];
+    const blocks = src.slice(0, 8).map((b) => ({ start: hm(b.start, '07:00'), end: hm(b.end, '23:00'), idle: Boolean(b.idle) })).sort((a, b) => a.start.localeCompare(b.start));
+    return { id: /^[\w-]{1,16}$/.test(e.id) ? e.id : `s${i + 1}`, days, blocks, below: num(e.below, 0, 3000, 25), mins: Math.round(num(e.mins, 1, 240, 10)) };
   });
   return { on: Boolean(v.on), entries };
 }
@@ -441,7 +444,8 @@ async function pollAll() {
 // in between you can switch by hand at any time. Conditions (power, temperature) are checked on every poll.
 function crossedFn(prev, now) {
   const a = minOfDay(prev), b = minOfDay(now), sameDay = dayKey(prev) === dayKey(now);
-  return (m) => { m = ((m % 1440) + 1440) % 1440; if (a === b && sameDay) return false; return a < b ? m > a && m <= b : m > a || m <= b; };
+  // same day but the clock went back (end of summer time): nothing was crossed, the hour simply repeats
+  return (m) => { m = ((m % 1440) + 1440) % 1440; if (sameDay && b <= a) return false; return a < b ? m > a && m <= b : m > a || m <= b; };
 }
 // Vacation: a different but fixed time in the window each day (random from device + date), short in the morning, longer in the evening
 function vacationSlots(d, day) {
@@ -479,16 +483,18 @@ async function motionRule(d, now) {
 // Schedule with "only off once no longer in use": applies from "off at" until the next "on at", at most 12 hours.
 // Computed without stored state so a server restart loses nothing.
 function idleWatch(c, now) {
-  if (!c.schedule.on || !c.schedule.entries.some((e) => e.idle)) return null;
+  if (!c.schedule.on || !c.schedule.entries.some((e) => e.blocks.some((b) => b.idle))) return null;
   const today = dayKey(now), at = (day, hm) => dayStart(day) + hm2min(hm) * 60e3;
   const entryOf = (day) => c.schedule.entries.find((e) => e.days.includes(weekday(dayStart(day) + 12 * 3600e3)));
   const ons = [];
-  for (let k = -2; k <= 8; k++) { const day = addDays(today, k), e = entryOf(day); if (e) ons.push(at(day, e.start)); }
+  for (let k = -2; k <= 8; k++) { const day = addDays(today, k); for (const b of entryOf(day)?.blocks || []) ons.push(at(day, b.start)); }
   for (let k = -2; k <= 0; k++) {
     const day = addDays(today, k), e = entryOf(day);
-    if (!e?.idle) continue;
-    const off = at(hm2min(e.end) <= hm2min(e.start) ? addDays(day, 1) : day, e.end), next = Math.min(...ons.filter((x) => x > off), off + 12 * 3600e3);
-    if (now >= off && now < next) return e;
+    for (const b of e?.blocks || []) {
+      if (!b.idle) continue;
+      const off = at(hm2min(b.end) <= hm2min(b.start) ? addDays(day, 1) : day, b.end), next = Math.min(...ons.filter((x) => x > off), off + 12 * 3600e3);
+      if (now >= off && now < next) return e; // the group carries the threshold (below, mins)
+    }
   }
   return null;
 }
@@ -499,10 +505,18 @@ async function runRules(d, prev, now) {
   if (kindOf(d) === 'button') return;
   const sw = async (on, why) => { if (r.relay !== on) await setRelay(d.mac, on, why); };
   // Schedule
-  const t = c.schedule.on && c.schedule.entries.find((e) => e.days.includes(weekday(now)));
-  if (t) {
-    if (crossed(hm2min(t.start))) await sw(true, 'Zeitplan');
-    if (!t.idle && crossed(hm2min(t.end))) await sw(false, 'Zeitplan');
+  // schedule: every block switches on at its start and off at its end; a block past midnight ends on the next day.
+  // Off before on, so back-to-back blocks (…–08:00, 08:00–…) stay on.
+  if (c.schedule.on) {
+    const groupOn = (ts) => c.schedule.entries.find((e) => e.days.includes(weekday(ts)));
+    const overnight = (b) => hm2min(b.end) <= hm2min(b.start);
+    const today = groupOn(now)?.blocks || [], yesterday = groupOn(now - 864e5)?.blocks || [];
+    const offs = [...today.filter((b) => !b.idle && !overnight(b)), ...yesterday.filter((b) => !b.idle && overnight(b))];
+    // still inside another on-time (back-to-back or overlapping): stay on instead of a short off and on
+    const inside = (b, day) => { const st = hm2min(b.start), en = hm2min(b.end); return day === 'today' ? (overnight(b) ? m >= st : m >= st && m < en) : overnight(b) && m < en; };
+    const covered = today.some((b) => inside(b, 'today')) || yesterday.some((b) => inside(b, 'yesterday'));
+    if (!covered && offs.some((b) => crossed(hm2min(b.end)))) await sw(false, 'Zeitplan');
+    if (today.some((b) => crossed(hm2min(b.start)))) await sw(true, 'Zeitplan');
   }
   // "only off once no longer in use": from "off at", switch off once power stays below the threshold long enough
   const w = idleWatch(c, now);
@@ -956,8 +970,8 @@ if (CFG.demo && !devices.size) {
   const names = [['DEMO00000001', 'Schreibtisch', 'Büro'], ['DEMO00000002', 'Magic Mirror', 'Schlafzimmer'], ['DEMO00000003', 'Lampe', 'Wohnzimmer']];
   for (const [mac, name, room] of names) {
     const cfg = { ...DEFAULT_CFG(), name, room };
-    if (mac.endsWith('1')) cfg.schedule = { on: true, entries: [{ id: 's1', start: '07:00', end: '23:00', days: [1, 2, 3, 4, 5, 6, 0], idle: true, below: 25, mins: 10 }] };
-    if (mac.endsWith('2')) cfg.schedule = { on: true, entries: [{ id: 's1', start: '06:30', end: '23:00', days: [1, 2, 3, 4, 5] }, { id: 's2', start: '08:30', end: '23:30', days: [6, 0] }] };
+    if (mac.endsWith('1')) cfg.schedule = { on: true, entries: [{ id: 's1', days: [1, 2, 3, 4, 5, 6, 0], blocks: [{ start: '07:00', end: '23:00', idle: true }], below: 25, mins: 10 }] };
+    if (mac.endsWith('2')) cfg.schedule = { on: true, entries: [{ id: 's1', days: [1, 2, 3, 4, 5], blocks: [{ start: '06:00', end: '08:00', idle: false }, { start: '17:00', end: '23:00', idle: true }], below: 25, mins: 10 }, { id: 's2', days: [6, 0], blocks: [{ start: '08:00', end: '00:00', idle: false }], below: 25, mins: 10 }] };
     if (mac.endsWith('3')) cfg.vacation.on = true;
     const d = { mac, ip: `demo-${mac.slice(-1)}`, type: 106, fw: '4.0.14', cfg, added: Date.now() };
     devices.set(mac, d); saveDevice(d);

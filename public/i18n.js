@@ -1,5 +1,15 @@
 // English texts for the app. Key: the German source text as passed to tr() in app.js; {0}, {1} … are placeholders.
 const I18N_EN = {
+  'Fährt herunter …': 'Shutting down …',
+  '{0} antwortet nicht. Trotzdem ausschalten?': '{0} is not responding. Switch off anyway?',
+  'Vor dem Ausschalten herunterfahren': 'Shut down before switching off',
+  'für Raspberry Pi oder PC an dieser Steckdose': 'for a Raspberry Pi or PC on this plug',
+  'Adresse': 'Address',
+  'Token': 'Token',
+  'gespeichert': 'saved',
+  'Warten höchstens': 'Wait at most',
+  'Verbindung testen': 'Test connection',
+  'Die App fährt das Gerät zuerst herunter und schaltet den Strom erst ab, wenn es aus ist. Dafür läuft auf dem Gerät ein kleiner Dienst (siehe README). Der Knopf an der Steckdose schaltet weiterhin sofort.': 'The app shuts the computer down first and only cuts the power once it is off. This needs a small service on the computer (see README). The button on the plug still switches immediately.',
   // dates, weekdays, months
   '{0}.{1}.': '{0}/{1}',
   '{0}. {1}': '{0} {1}',

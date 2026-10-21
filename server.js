@@ -135,6 +135,8 @@ const DEFAULT_CFG = () => {
     alarms: { offline: true, unusual: true, switchedOn: false, hot: true },
     saver: { on: false, below: 5, mins: 30, back: 'time', at: '07:00', hours: 2 },
     timer: { on: false, mins: 120 },
+    // shut the computer behind the plug down first (shutdown agent at url), cut the power once it is off (at most `wait` s)
+    shutdown: { on: false, url: '', token: '', wait: 90 },
     // Bulb: last chosen color as HSV (hue 0–360, saturation 0–100, brightness 1–100)
     light: { h: 30, s: 20, v: 80 },
     // Button: per press either nothing, toggle/on/off a device, or a scene
@@ -144,7 +146,7 @@ const DEFAULT_CFG = () => {
   };
 };
 // Validate input against the shape of the defaults: time, date, number, yes/no, text, weekdays
-const LIMITS = { h: [0, 360], s: [0, 100], v: [1, 100], lux: [0, 2000], price: [0, 5], lat: [-90, 90], lon: [-180, 180], tcorr: [-10, 10], below: [0, 3000], mins: [1, 1440], max: [20, 90], onOffset: [-180, 180], offOffset: [-180, 180], hours: [1, 48] };
+const LIMITS = { wait: [20, 600], h: [0, 360], s: [0, 100], v: [1, 100], lux: [0, 2000], price: [0, 5], lat: [-90, 90], lon: [-180, 180], tcorr: [-10, 10], below: [0, 3000], mins: [1, 1440], max: [20, 90], onOffset: [-180, 180], offOffset: [-180, 180], hours: [1, 48] };
 function clean(def, val, key = '') {
   if (val === undefined || val === null) return def;
   if (typeof def === 'boolean') return Boolean(val);
@@ -159,6 +161,8 @@ function clean(def, val, key = '') {
   if (/^\d{4}-\d{2}-\d{2}$/.test(def)) return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : def;
   if (key === 'back') return ['hand', 'time', 'after'].includes(s) ? s : def;
   if (key === 'do') return ['none', 'toggle', 'on', 'off', 'scene'].includes(s) ? s : def;
+  if (key === 'url') return s === '' || /^https?:\/\/[\w.-]+(:\d{1,5})?\/?$/.test(s) ? s.replace(/\/$/, '') : def;
+  if (key === 'token') return /^[\w-]{0,200}$/.test(s) ? s : def;
   return s.slice(0, 40);
 }
 // Validate schedules; the old form (a single start/end/days) becomes the first entry. A day already taken is dropped from later entries.
@@ -289,15 +293,50 @@ function discover() {
 // ---------- Events and switching ----------
 function logEvent(mac, kind, text) { q.addEvent.run(Date.now(), mac, kind, text); }
 // Switch with a reason; the reason shows up in the history and the status ("Aus seit 23:31 · nicht mehr benutzt")
-async function setRelay(mac, on, why) {
+async function setRelay(mac, on, why, opt = {}) {
   const d = devices.get(mac), r = R(mac);
   if (!d) throw new Error(tr('Unbekanntes Gerät.'));
+  if (!on && !opt.force && kindOf(d) === 'switch' && d.cfg.shutdown.on && d.cfg.shutdown.url && r.relay) return shutdownThenOff(d, why, opt);
+  if (on && r.shutting) { r.shutting.thenOn = true; return; } // switched on again while shutting down: power-cycle afterwards so it boots
   if (kindOf(d) === 'bulb') await devFetch(d, `/api/v1/device/${d.mac}`, 4000, `action=${on ? 'on' : 'off'}&ramp=400`);
   else if (kindOf(d) === 'switch') await devFetch(d, `/relay?state=${on ? 1 : 0}`);
   else throw new Error(tr('{0} lässt sich nicht schalten.', nameOf(d)));
   r.expect = { relay: on, until: Date.now() + CFG.pollMs * 2 };
   if (r.relay !== on) edge(d, on, why);
   r.relay = on; if (!on) r.w = 0;
+}
+// Clean shutdown before cutting the power: ask the shutdown agent on the computer, wait until it no longer answers
+// (plus a margin for the last writes), then switch the relay off. Runs in the background; the relay stays on meanwhile.
+// If the agent can't be reached, automatic rules leave the power on (and notify); a manual switch-off asks first (code 'shutdown').
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+async function shutdownThenOff(d, why, opt) {
+  const r = R(d.mac), sd = d.cfg.shutdown;
+  if (r.shutting) return;
+  try {
+    const res = await fetch(`${sd.url}/shutdown`, { method: 'POST', headers: { Authorization: `Bearer ${sd.token}` }, signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error(res.status === 401 ? 'token' : `HTTP ${res.status}`);
+  } catch (e) {
+    const reason = e.message === 'token' ? 'Token falsch' : /^HTTP \d+$/.test(e.message) ? e.message : 'keine Antwort'; // network errors read as 'no answer'
+    if (opt.manual) throw Object.assign(new Error(tr('{0} antwortet nicht und kann nicht heruntergefahren werden.', nameOf(d))), { code: 'shutdown' });
+    logEvent(d.mac, 'info', `Herunterfahren nicht möglich, bleibt an (${reason})`);
+    notify(d, 'shutdown', `${nameOf(d)} wurde nicht ausgeschaltet`, `Herunterfahren nicht möglich: ${reason}`);
+    return;
+  }
+  const job = (r.shutting = { since: Date.now(), why });
+  logEvent(d.mac, 'info', `Fährt herunter (${why})`);
+  (async () => {
+    const until = Date.now() + sd.wait * 1000;
+    while (Date.now() < until) {
+      await sleep(3000);
+      try { await fetch(`${sd.url}/health`, { signal: AbortSignal.timeout(2000) }); } catch { break; } // gone: network is down
+    }
+    await sleep(Math.max(0, Math.min(15000, until - Date.now()))); // margin for the last writes and the halt
+    r.shutting = null;
+    try {
+      await setRelay(d.mac, false, why, { force: true });
+      if (job.thenOn) { await sleep(5000); await setRelay(d.mac, true, 'von Hand in der App'); }
+    } catch (e) { logEvent(d.mac, 'info', `Herunterfahren nicht möglich, bleibt an (${e.message})`); }
+  })();
 }
 // Bulb: color and brightness (HSV), also switches it on
 async function setLight(mac, { h, s: sat, v }) {
@@ -540,6 +579,7 @@ function statusText(d) {
   if (kindOf(d) === 'button') return r.lastPress ? tr('zuletzt {0} gedrückt', ago(r.lastPress.ts)) : r.seen ? tr('zuletzt aktiv {0}', ago(r.seen)) : tr('meldet sich nach dem ersten Drücken');
   if (kindOf(d) === 'motion') { if (!r.online) return r.seen ? tr('Offline seit {0}', clock(r.seen)) : tr('Wird verbunden …'); return r.motion ? tr('Bewegung') : r.lastMotion ? tr('Bewegung {0}', ago(r.lastMotion)) : tr('keine Bewegung'); }
   if (!r.online) return r.seen ? tr('Offline seit {0}', clock(r.seen)) : tr('Wird verbunden …');
+  if (r.shutting) return tr('Fährt herunter …');
   const iw = r.relay && idleWatch(c, now);
   if (iw) {
     if (r.lowSince) return tr('Unter {0} W · aus in {1} min', iw.below, Math.max(1, Math.ceil(iw.mins - (now - r.lowSince) / 60e3)));
@@ -563,7 +603,8 @@ const sinceWh = (mac, ts) => sumOver(mac, () => q.sumWhAll.get(ts).wh, (m) => q.
 function deviceJson(d) {
   const r = R(d.mac), today = dayKey(Date.now());
   return {
-    mac: d.mac, ip: d.ip, type: d.type, kind: kindOf(d), typeName: TYPES[d.type] || tr('Typ {0}', d.type), fw: d.fw, name: nameOf(d), cfg: d.cfg,
+    mac: d.mac, ip: d.ip, type: d.type, kind: kindOf(d), typeName: TYPES[d.type] || tr('Typ {0}', d.type), fw: d.fw, name: nameOf(d),
+    cfg: { ...d.cfg, shutdown: { ...d.cfg.shutdown, token: d.cfg.shutdown.token ? '__set__' : '' } }, shutting: Boolean(r.shutting), // token never leaves the server
     ...(kindOf(d) === 'bulb' ? { color: r.color || null } : {}),
     ...(kindOf(d) === 'button' ? { voltage: r.voltage ?? null, charge: r.charge ?? null, battery: r.voltage == null ? null : Math.max(0, Math.min(100, Math.round((r.voltage - 3.3) / 0.9 * 100))), lastPress: r.lastPress || null, synced: r.synced === JSON.stringify(buttonUrls(d)), touch: d.type !== 104 } : {}),
     ...(kindOf(d) === 'motion' ? { motion: Boolean(r.motion), light: r.light ?? null, lastMotion: r.lastMotion || null } : {}),
@@ -786,8 +827,22 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       if (dev.cfg.lock) return json({ error: tr('Tastensperre ist an.') }, 423);
       if (!R(dev.mac).online) return json({ error: tr('{0} ist nicht erreichbar.', nameOf(dev)) }, 503);
-      await setRelay(dev.mac, Boolean(b.on), 'von Hand in der App');
+      try { await setRelay(dev.mac, Boolean(b.on), 'von Hand in der App', { manual: true, force: Boolean(b.force) }); }
+      catch (e) { if (e.code === 'shutdown') return json({ error: e.message, code: 'shutdown' }, 409); throw e; }
       return json(deviceJson(dev));
+    }
+    // "Test connection" for the shutdown agent: is it reachable and is the token right (does not shut down)
+    const tm = /^\/api\/devices\/([0-9A-Z]{12})\/shutdown-test$/.exec(p);
+    if (tm && req.method === 'POST') {
+      const d = devices.get(tm[1]); if (!d) return json({ error: tr('Unbekanntes Gerät.') }, 404);
+      const sd = d.cfg.shutdown;
+      if (!sd.url || !sd.token) return json({ error: tr('Bitte zuerst Adresse und Token eintragen.') }, 400);
+      try {
+        const res = await fetch(`${sd.url}/check`, { headers: { Authorization: `Bearer ${sd.token}` }, signal: AbortSignal.timeout(4000) });
+        if (res.status === 401) return json({ error: tr('Token falsch') }, 422);
+        if (!res.ok) return json({ error: `HTTP ${res.status}` }, 422);
+        return json({ ok: true, message: tr('Verbindung ok') });
+      } catch { return json({ error: tr('Keine Antwort von {0}', sd.url) }, 422); }
     }
     // read-only diagnostics: what the device itself reports (settings, list of firmware endpoints)
     const gm = /^\/api\/devices\/([0-9A-Z]{12})\/diag$/.exec(p);
@@ -812,6 +867,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (dm && req.method === 'PUT') {
       const b = await readBody(req);
+      if (b.cfg?.shutdown?.token === '__set__') delete b.cfg.shutdown.token; // placeholder from the app: keep the saved token
       dev.cfg = clean(DEFAULT_CFG(), merge(dev.cfg, b.cfg || {}));
       saveDevice(dev);
       if (kindOf(dev) === 'button' && b.cfg?.button) { R(dev.mac).synced = null; buttonAwake(dev); } // works if it is awake right now; otherwise on the next press

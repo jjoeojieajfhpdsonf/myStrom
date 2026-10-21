@@ -163,7 +163,7 @@ function featInfo(d, k) {
 async function api(p, opt = {}) {
   const r = await fetch(p, { ...opt, headers: { 'Content-Type': 'application/json', ...opt.headers } });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || tr('Fehler {0}', r.status));
+  if (!r.ok) throw Object.assign(new Error(j.error || tr('Fehler {0}', r.status)), { code: j.code });
   return j;
 }
 async function load() {
@@ -204,11 +204,20 @@ async function switchDev(mac, on) {
   if (d.cfg.lock) { toast(tr('{0}: Tastensperre ist an', d.name)); return false; }
   if (!d.online) { toast(tr('{0} ist nicht erreichbar', d.name), true); return false; }
   const before = { relay: d.relay, w: d.w, status: d.status };
-  d.relay = on; d.status = on ? tr('Eingeschaltet') : tr('Aus · von Hand'); if (!on) d.w = 0; render();
+  // with "shut down before switching off" the plug stays on until the computer is off
+  const soft = !on && d.cfg.shutdown?.on && d.cfg.shutdown.url;
+  if (soft) { d.shutting = true; d.status = tr('Fährt herunter …'); } else { d.relay = on; d.status = on ? tr('Eingeschaltet') : tr('Aus · von Hand'); if (!on) d.w = 0; }
+  render();
+  const send = (force) => api(`api/devices/${mac}/relay`, { method: 'POST', body: JSON.stringify({ on, force }) });
   try {
-    Object.assign(d, await api(`api/devices/${mac}/relay`, { method: 'POST', body: JSON.stringify({ on }) })); render();
+    Object.assign(d, await send(false)); render();
     return true;
-  } catch (e) { Object.assign(d, before); render(); toast(e.message, true); return false; }
+  } catch (e) {
+    if (e.code === 'shutdown' && confirm(tr('{0} antwortet nicht. Trotzdem ausschalten?', d.name))) {
+      try { Object.assign(d, await send(true)); render(); return true; } catch (x) { e = x; }
+    }
+    Object.assign(d, before, { shutting: false }); render(); if (e.code !== 'shutdown') toast(e.message, true); return false;
+  }
 }
 const shake = (el) => el?.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(-3px)' }, { transform: 'none' }], 260);
 
@@ -307,6 +316,7 @@ const STEPS = {
   offs: [range(-180, 180, 5), (m) => (m ? `${m > 0 ? '+' : '−'}${dur(Math.abs(m))}` : tr('genau'))],
   hours: [range(1, 48, 1), (h) => `${h} h`],
   temp: [range(20, 90, 1), (t) => `${t} °C`],
+  secs: [[20, 30, 45, 60, 90, 120, 180, 240, 300, 450, 600], (x) => (x < 60 ? `${x} s` : x % 60 ? `${Math.floor(x / 60)} min ${x % 60} s` : `${x / 60} min`)],
   lux: [[0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200, 300, 500], (x) => `${x} lx`],
   tcorr: [range(-10, 10, 0.5), (t) => `${t > 0 ? '+' : t < 0 ? '−' : ''}${dec(Math.abs(t))} °C`],
 };
@@ -410,7 +420,7 @@ function homeHTML() {
       ${SW().map((d) => (T[d.mac] = `<div class="tile dev ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-mac="${d.mac}" data-okey="${d.mac}">
         <div class="face">${d.temp != null ? `<span class="tmp">${d.temp.toFixed(1)}°C</span>` : ''}${d.cfg.lock ? `<span class="lock" title="${tr('Tastensperre')}">🔒</span>` : ''}
         <span class="ico"${bulbTint(d)}>${devIcon(d)}</span><span class="lb">${d.relay ? `${w1(d.w)}<br>` : ''}${esc(d.name)}</span>
-        ${d.online ? '' : `<span class="sub">${tr('Offline')}</span>`}</div>
+        ${!d.online ? `<span class="sub">${tr('Offline')}</span>` : d.shutting ? `<span class="sub">${tr('Fährt herunter …')}</span>` : ''}</div>
         <button type="button" class="hit" data-swipe="${d.mac}" aria-label="${d.relay ? tr('{0}, an. Öffnen; Wischen oder Leertaste schaltet', esc(d.name)) : tr('{0}, aus. Öffnen; Wischen oder Leertaste schaltet', esc(d.name))}"></button></div>`, '')).join('')}
       ${(editHome ? editOrder : homeOrder()).map((k) => T[k]).join('')}
       ${S.devices.length ? '' : tile('more', I.plug, tr('Gerät hinzufügen'))}
@@ -462,13 +472,24 @@ function motionHTML(d) {
     <p class="sec">${tr('Diese Geräte')}</p><div class="chips">${SW().map((t) => `<button type="button" class="chip" data-mtarget="${t.mac}" aria-pressed="${m.targets.includes(t.mac)}">${esc(t.name)}</button>`).join('')}</div>
     <p class="note">${tr('Aus geht nur, was der Melder selbst eingeschaltet hat; von Hand Eingeschaltetes bleibt an.')}</p>`;
 }
+// plug settings: shut the computer behind it down before switching off (shutdown agent, see README)
+function shutdownHTML(d) {
+  const sd = d.cfg.shutdown;
+  return `<p class="sec">${tr('Vor dem Ausschalten herunterfahren')}</p><div class="${sd.on ? 'ls' : 'ls dim'}">
+    <div class="row master"><span class="tx"><b>${tr('Aktiv')}</b><span>${tr('für Raspberry Pi oder PC an dieser Steckdose')}</span></span>${sw('shutdown.on', sd.on, tr('Vor dem Ausschalten herunterfahren'))}</div>
+    ${sd.on ? `${lrow(tr('Adresse'), `<input type="url" data-in="shutdown.url" value="${esc(sd.url)}" placeholder="http://192.168.0.209:8098" inputmode="url" autocomplete="off" style="max-width:220px">`)}
+      ${lrow(tr('Token'), `<input type="password" data-in="shutdown.token" value="" placeholder="${sd.token ? tr('gespeichert') : tr('Token')}" autocomplete="off" style="max-width:220px">`)}
+      ${srow(tr('Warten höchstens'), stepper('shutdown.wait', 'secs', sd.wait, tr('Warten höchstens')))}
+      ${row(tr('Verbindung testen'), chev(), '', 'data-sdtest="1"')}` : ''}</div>
+    ${sd.on ? `<p class="note">${tr('Die App fährt das Gerät zuerst herunter und schaltet den Strom erst ab, wenn es aus ist. Dafür läuft auf dem Gerät ein kleiner Dienst (siehe README). Der Knopf an der Steckdose schaltet weiterhin sofort.')}</p>` : ''}`;
+}
 function deviceHTML(d) {
   if (d.kind === 'button') return buttonHTML(d);
   if (d.kind === 'motion') return motionHTML(d);
   return HD(esc(d.name), 'home', `<button type="button" class="ic" data-go="dev/${d.mac}/settings" aria-label="${tr('Einstellungen')}">${I.gear}</button>`, esc(roomLabel(d.cfg.room)))
     + `<div class="grid">
       <button type="button" class="tile devtgl ${d.relay ? 'on' : ''} ${d.online ? '' : 'off-line'}" data-devtoggle="${d.mac}" role="switch" aria-checked="${d.relay}" aria-label="${d.relay ? tr('{0} ausschalten', esc(d.name)) : tr('{0} einschalten', esc(d.name))}">
-        <span class="ico"${bulbTint(d)}>${d.kind === 'bulb' ? devIcon(d) : sockIcon(d)}</span><span class="lb">${!d.online ? tr('Offline') : d.relay ? pw(d.w) : tr('Aus')}</span></button>
+        <span class="ico"${bulbTint(d)}>${d.kind === 'bulb' ? devIcon(d) : sockIcon(d)}</span><span class="lb">${!d.online ? tr('Offline') : d.shutting ? tr('Fährt herunter …') : d.relay ? pw(d.w) : tr('Aus')}</span></button>
       ${FEAT().filter(([k]) => d.kind === 'switch' || k !== 'temp').map(([k, ic, l], i) => (d.kind === 'bulb' && i === 1 ? `</div>${lightHTML(d)}<div class="grid">` : '') + (() => { const [on, txt] = featInfo(d, k); return `<button type="button" class="tile feat ${on ? 'act' : ''}" data-go="dev/${d.mac}/${k}"><span class="ico">${I[ic]}</span><span class="lb">${l}</span><span class="sub">${on || k === 'eval' ? esc(txt) : tr('aus')}</span></button>`; })()).join('')}
     </div>`;
 }
@@ -586,6 +607,7 @@ function featureHTML(d, k, sub) {
         ${row(tr('Symbol'), chev(esc(iconName(d))), '', `data-go="dev/${d.mac}/icon"`)}
         ${d.kind === 'switch' || d.kind === 'motion' ? srow(tr('Temperatur-Korrektur'), stepper('tcorr', 'tcorr', c.tcorr, tr('Temperatur-Korrektur')), tr('wird zur Messung addiert')) : ''}
         ${row(tr('Technische Details'), chev(), '', `data-go="dev/${d.mac}/tech"`)}</div>
+      ${d.kind === 'switch' ? shutdownHTML(d) : ''}
       ${canSwitch(d) ? `<div class="ls"><div class="row"><span class="tx"><b>${tr('Tastensperre')}</b><span>${tr('in der App nicht mehr schaltbar')}</span></span>${sw('lock', c.lock, tr('Tastensperre'))}</div></div>` : ''}
       <button type="button" class="btn danger" data-remove="${d.mac}">${d.kind === 'switch' ? tr('Steckdose entfernen') : tr('Gerät entfernen')}</button>`;
     case 'room': {
@@ -1302,6 +1324,8 @@ app.addEventListener('click', async (e) => {
   else if ((el = at('[data-step]'))) {
     haptic(); const p = el.dataset.step, dir = Number(el.dataset.dir);
     stpSave(p, nextStep(el.dataset.list, Number(el.parentElement.querySelector('.stpv').dataset.v), dir));
+  } else if (at('[data-sdtest]')) {
+    haptic(); try { const t = await api(`api/devices/${r1}/shutdown-test`, { method: 'POST' }); toast(t.message); } catch (x) { toast(x.message, true); }
   } else if ((el = at('[data-btndo]'))) {
     haptic(); const [k, v] = el.dataset.btndo.split('|'), a = dev(r1).cfg.button[k];
     saveCfg(r1, { button: { [k]: { do: v, mac: a.mac || (['toggle', 'on', 'off'].includes(v) ? SW()[0]?.mac || '' : ''), scene: a.scene || (v === 'scene' ? S.scenes[0]?.id || '' : '') } } });

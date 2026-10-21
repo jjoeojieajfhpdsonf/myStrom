@@ -2,6 +2,13 @@
 // {0}, {1} … are placeholders. EN_PATTERNS translate composed texts, e.g. stored history entries.
 // In EN_PATTERNS templates, {0} inserts capture group 1 as is, {t0} inserts it translated as well (trText).
 export const EN = {
+  'Fährt herunter …': 'Shutting down …',
+  '{0} antwortet nicht und kann nicht heruntergefahren werden.': '{0} is not responding and cannot be shut down.',
+  'Bitte zuerst Adresse und Token eintragen.': 'Please enter the address and the token first.',
+  'Token falsch': 'Wrong token',
+  'Verbindung ok': 'Connection OK',
+  'Keine Antwort von {0}': 'No answer from {0}',
+  'keine Antwort': 'no answer',
   // ----- Generated on the fly (tr) -----
   // default device names (+ last 4 characters of the MAC)
   'Steckdose': 'Plug',
@@ -93,6 +100,12 @@ const P = (src, en) => [new RegExp(`^${src}$`), en];
 
 // Composed stored texts. Specific patterns first, generic ones (e.g. "über …", "Szene …") last.
 export const EN_PATTERNS = [
+  // clean shutdown before switching off
+  [/^(.+) wurde nicht ausgeschaltet\. Herunterfahren nicht möglich: (.+)$/, '{0} was not switched off. Could not shut down: {t1}'],
+  [/^(.+) wurde nicht ausgeschaltet$/, '{0} was not switched off'],
+  [/^Herunterfahren nicht möglich: (.+)$/, 'Could not shut down: {t0}'],
+  [/^Herunterfahren nicht möglich, bleibt an \((.+)\)$/, 'Could not shut down, stays on ({t0})'],
+  [/^Fährt herunter \((.+)\)$/, 'Shutting down ({t0})'],
   // alarms: stored as "title. body"
   P('(.+) wurde eingeschaltet\\. (.+)', '{0} was switched on ({t1})'),
   P('(.+) wurde eingeschaltet', '{0} was switched on'),

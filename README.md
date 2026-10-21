@@ -65,6 +65,19 @@ DEMO=1 PORT=8095 DB_PATH=/tmp/demo.db node server.js
 
 Open the app on your phone and choose "Add to Home Screen". On the iPhone, push notifications only work from the home-screen app, and they need HTTPS, for example via `tailscale serve` or a reverse proxy.
 
+### Clean shutdown of a computer behind a plug (optional)
+
+For a Raspberry Pi (e.g. a MagicMirror) or a PC on a plug, the app can shut the computer down before it cuts the power. A small service on the computer accepts the shutdown request:
+
+```bash
+mkdir -p ~/mystrom-shutdown && cd ~/mystrom-shutdown \
+  && curl -fsSLO https://raw.githubusercontent.com/jjoeojieajfhpdsonf/myStrom/main/tools/shutdown-agent.py \
+  && curl -fsSLO https://raw.githubusercontent.com/jjoeojieajfhpdsonf/myStrom/main/tools/install-shutdown-agent.sh \
+  && sh install-shutdown-agent.sh
+```
+
+The script installs it as a systemd service (port 8098) and prints the URL and a token. Enter both in the app under the plug's *Settings › Shut down before switching off* and tap *Test connection*. From then on every switch-off by the app (schedule, timer, scene, by hand) first sends the shutdown request, waits until the computer no longer answers plus 15 seconds, and only then switches the relay off. If the computer can't be reached, automatic rules leave the power on and send a notification; switching off by hand asks first. The button on the plug itself still cuts the power immediately. Switching on simply powers the computer up.
+
 ### Deploy hook (optional)
 
 `tools/deploy-hook.py` updates projects on the server with one HTTP call: `POST /deploy/<service>` fetches the branch, resets the checkout to it (also after a rewritten history), rebuilds the containers and waits until the app answers again, streaming the output. It runs on the host as a systemd service, listens on `127.0.0.1` only and needs a secret token. It can serve several docker-compose projects. Set it up once on the server:

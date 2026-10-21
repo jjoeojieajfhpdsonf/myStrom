@@ -307,7 +307,7 @@ async function setRelay(mac, on, why, opt = {}) {
 }
 // Clean shutdown before cutting the power: ask the shutdown agent on the computer, wait until it no longer answers
 // (plus a margin for the last writes), then switch the relay off. Runs in the background; the relay stays on meanwhile.
-// If the agent can't be reached, automatic rules leave the power on (and notify); a manual switch-off asks first (code 'shutdown').
+// Only for automatic switch-offs; by hand in the app the power goes off at once. If the agent can't be reached, the power stays on (and a notification goes out).
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 async function shutdownThenOff(d, why, opt) {
   const r = R(d.mac), sd = d.cfg.shutdown;
@@ -317,7 +317,6 @@ async function shutdownThenOff(d, why, opt) {
     if (!res.ok) throw new Error(res.status === 401 ? 'token' : `HTTP ${res.status}`);
   } catch (e) {
     const reason = e.message === 'token' ? 'Token falsch' : /^HTTP \d+$/.test(e.message) ? e.message : 'keine Antwort'; // network errors read as 'no answer'
-    if (opt.manual) throw Object.assign(new Error(tr('{0} antwortet nicht und kann nicht heruntergefahren werden.', nameOf(d))), { code: 'shutdown' });
     logEvent(d.mac, 'info', `Herunterfahren nicht möglich, bleibt an (${reason})`);
     notify(d, 'shutdown', `${nameOf(d)} wurde nicht ausgeschaltet`, `Herunterfahren nicht möglich: ${reason}`);
     return;
@@ -827,8 +826,7 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       if (dev.cfg.lock) return json({ error: tr('Tastensperre ist an.') }, 423);
       if (!R(dev.mac).online) return json({ error: tr('{0} ist nicht erreichbar.', nameOf(dev)) }, 503);
-      try { await setRelay(dev.mac, Boolean(b.on), 'von Hand in der App', { manual: true, force: Boolean(b.force) }); }
-      catch (e) { if (e.code === 'shutdown') return json({ error: e.message, code: 'shutdown' }, 409); throw e; }
+      await setRelay(dev.mac, Boolean(b.on), 'von Hand in der App', { force: true }); // by hand: no shutdown first
       return json(deviceJson(dev));
     }
     // "Test connection" for the shutdown agent: is it reachable and is the token right (does not shut down)

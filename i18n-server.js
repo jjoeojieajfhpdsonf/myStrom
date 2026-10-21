@@ -3,7 +3,6 @@
 // In EN_PATTERNS templates, {0} inserts capture group 1 as is, {t0} inserts it translated as well (trText).
 export const EN = {
   'Fährt herunter …': 'Shutting down …',
-  '{0} antwortet nicht und kann nicht heruntergefahren werden.': '{0} is not responding and cannot be shut down.',
   'Bitte zuerst Adresse und Token eintragen.': 'Please enter the address and the token first.',
   'Token falsch': 'Wrong token',
   'Verbindung ok': 'Connection OK',

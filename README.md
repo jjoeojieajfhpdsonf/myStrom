@@ -76,7 +76,7 @@ mkdir -p ~/mystrom-shutdown && cd ~/mystrom-shutdown \
   && sh install-shutdown-agent.sh
 ```
 
-The script installs it as a systemd service (port 8098) and prints the URL and a token. Enter both in the app under the plug's *Settings › Shut down before switching off* and tap *Test connection*. From then on every switch-off by the app (schedule, timer, scene, by hand) first sends the shutdown request, waits until the computer no longer answers plus 15 seconds, and only then switches the relay off. If the computer can't be reached, automatic rules leave the power on and send a notification; switching off by hand asks first. The button on the plug itself still cuts the power immediately. Switching on simply powers the computer up.
+The script installs it as a systemd service (port 8098) and prints the URL and a token. Enter both in the app under the plug's *Settings › Shut down before switching off* and tap *Test connection*. From then on every automatic switch-off (schedule, timer, scene, rules, buttons, motion sensor) first sends the shutdown request, waits until the computer no longer answers plus 15 seconds, and only then switches the relay off. If the computer can't be reached, the power stays on and a notification goes out. Switching off by hand in the app or with the button on the plug cuts the power at once. Switching on simply powers the computer up.
 
 ### Deploy hook (optional)
 

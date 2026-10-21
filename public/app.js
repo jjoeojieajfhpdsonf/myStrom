@@ -204,20 +204,11 @@ async function switchDev(mac, on) {
   if (d.cfg.lock) { toast(tr('{0}: Tastensperre ist an', d.name)); return false; }
   if (!d.online) { toast(tr('{0} ist nicht erreichbar', d.name), true); return false; }
   const before = { relay: d.relay, w: d.w, status: d.status };
-  // with "shut down before switching off" the plug stays on until the computer is off
-  const soft = !on && d.cfg.shutdown?.on && d.cfg.shutdown.url;
-  if (soft) { d.shutting = true; d.status = tr('Fährt herunter …'); } else { d.relay = on; d.status = on ? tr('Eingeschaltet') : tr('Aus · von Hand'); if (!on) d.w = 0; }
-  render();
-  const send = (force) => api(`api/devices/${mac}/relay`, { method: 'POST', body: JSON.stringify({ on, force }) });
+  d.relay = on; d.status = on ? tr('Eingeschaltet') : tr('Aus · von Hand'); if (!on) d.w = 0; render();
   try {
-    Object.assign(d, await send(false)); render();
+    Object.assign(d, await api(`api/devices/${mac}/relay`, { method: 'POST', body: JSON.stringify({ on }) })); render();
     return true;
-  } catch (e) {
-    if (e.code === 'shutdown' && confirm(tr('{0} antwortet nicht. Trotzdem ausschalten?', d.name))) {
-      try { Object.assign(d, await send(true)); render(); return true; } catch (x) { e = x; }
-    }
-    Object.assign(d, before, { shutting: false }); render(); if (e.code !== 'shutdown') toast(e.message, true); return false;
-  }
+  } catch (e) { Object.assign(d, before); render(); toast(e.message, true); return false; }
 }
 const shake = (el) => el?.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(-3px)' }, { transform: 'none' }], 260);
 
@@ -481,7 +472,7 @@ function shutdownHTML(d) {
       ${lrow(tr('Token'), `<input type="password" data-in="shutdown.token" value="" placeholder="${sd.token ? tr('gespeichert') : tr('Token')}" autocomplete="off" style="max-width:220px">`)}
       ${srow(tr('Warten höchstens'), stepper('shutdown.wait', 'secs', sd.wait, tr('Warten höchstens')))}
       ${row(tr('Verbindung testen'), chev(), '', 'data-sdtest="1"')}` : ''}</div>
-    ${sd.on ? `<p class="note">${tr('Die App fährt das Gerät zuerst herunter und schaltet den Strom erst ab, wenn es aus ist. Dafür läuft auf dem Gerät ein kleiner Dienst (siehe README). Der Knopf an der Steckdose schaltet weiterhin sofort.')}</p>` : ''}`;
+    ${sd.on ? `<p class="note">${tr('Schaltet die App automatisch aus (Zeitplan, Timer, Szene, Regel), fährt sie das Gerät zuerst herunter und schaltet den Strom erst ab, wenn es aus ist. Von Hand in der App und am Knopf der Steckdose geht der Strom sofort weg. Auf dem Gerät läuft dafür ein kleiner Dienst (siehe README).')}</p>` : ''}`;
 }
 function deviceHTML(d) {
   if (d.kind === 'button') return buttonHTML(d);

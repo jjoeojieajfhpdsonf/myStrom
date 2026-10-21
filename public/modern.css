@@ -150,11 +150,10 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline-color: var(
 .drawer-panel { background: var(--bg2); box-shadow: 1px 0 0 var(--line), 12px 0 40px rgb(0 0 0 / .5); border-radius: 0 24px 24px 0; }
 .ni:active, .ni:focus-visible { background: rgb(255 255 255 / .06); }
 /* Schedule: header per entry with "Remove" */
-.schd-hd { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-/* remove a schedule: quiet round icon, red only while pressed */
-.schd-hd .del { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--mut); background: rgb(255 255 255 / .05); }
-.schd-hd .del svg { width: 17px; height: 17px; }
-.schd-hd .del:active { color: var(--red); background: rgb(255 90 78 / .12); }
+/* remove a schedule: red row at the end of its card */
+.row.delrow { width: 100%; justify-content: center; gap: 8px; color: var(--red, #ff5a4e); font: inherit; background: none; border: 0; border-top: 1px solid var(--line); }
+.row.delrow svg { width: 17px; height: 17px; flex: none; }
+.row.delrow:active { background: rgb(255 90 78 / .1); }
 .stp .stpv { min-width: 72px; height: 34px; padding: 0 6px; border-radius: 9px; text-align: center; font-variant-numeric: tabular-nums; font-size: 15.5px; white-space: nowrap; color: var(--fg); background: transparent; }
 .stp .stpv:active { background: rgb(255 255 255 / .08); }
 .stp .stpin { width: 72px; height: 34px; padding: 0 6px; text-align: center; font: inherit; font-size: 16px; color: var(--fg); background: rgb(255 255 255 / .1); border: 0; border-radius: 9px; box-shadow: inset 0 0 0 1.5px var(--on-line); }

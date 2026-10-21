@@ -1,5 +1,6 @@
 // English texts for the app. Key: the German source text as passed to tr() in app.js; {0}, {1} … are placeholders.
 const I18N_EN = {
+  'Zeitplan entfernen': 'Remove schedule',
   'Fährt herunter …': 'Shutting down …',
   'Vor dem Ausschalten herunterfahren': 'Shut down before switching off',
   'für Raspberry Pi oder PC an dieser Steckdose': 'for a Raspberry Pi or PC on this plug',
@@ -172,7 +173,6 @@ const I18N_EN = {
   'Lädt …': 'Loading …',
   'Neu': 'New',
   'Hinzufügen': 'Add',
-  'Entfernen': 'Remove',
   'Name': 'Name',
   'Text': 'Text',
   'Symbol': 'Icon',

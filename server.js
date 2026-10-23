@@ -393,7 +393,8 @@ function edge(d, on, why) {
 // ---------- Measuring ----------
 // Bulb reports on/off, color and power; shaped like a socket report so consumption and rules work the same
 function bulbReport(d, x) { R(d.mac).color = x.color ?? null; return { relay: Boolean(x.on), power: Number(x.power) || 0 }; }
-let lastTick = Date.now();
+// last rule run, kept across restarts so the schedule can catch up on times missed while the server was down (at most 12 h)
+let lastTick = (() => { const t = Number(meta('lastTick', 0)); return t && Date.now() - t < 12 * 3600e3 ? t : Date.now(); })();
 async function pollDevice(d) {
   const r = R(d.mac), now = Date.now(), kind = kindOf(d);
   if (kind === 'button') { if (r.seen && now - r.seen > 36 * 3600e3) r.online = false; return; } // buttons sleep and report on their own
@@ -430,10 +431,10 @@ async function pollDevice(d) {
 }
 async function pollAll() {
   await Promise.all([...devices.values()].map(pollDevice));
-  const prev = lastTick; lastTick = Date.now();
+  const prev = lastTick; lastTick = Date.now(); setMeta('lastTick', lastTick);
   for (const d of devices.values()) await runRules(d, prev, lastTick).catch((e) => console.error('Regeln', nameOf(d), e.message));
-  // Scenes at fixed times
-  const crossed = crossedFn(prev, lastTick);
+  // Scenes at fixed times (a long gap after a restart is not caught up here, only the schedule is)
+  const crossed = crossedFn(Math.max(prev, lastTick - 5 * 60e3), lastTick);
   for (const sc of meta('scenes', defaultScenes())) {
     if (sc.time?.on && sc.time.days.includes(weekday(lastTick)) && crossed(hm2min(sc.time.at))) await runScene(sc.id).catch((e) => console.error('Szene', sc.name, e.message));
   }
@@ -484,7 +485,7 @@ async function motionRule(d, now) {
 // Computed without stored state so a server restart loses nothing.
 function idleWatch(c, now) {
   if (!c.schedule.on || !c.schedule.entries.some((e) => e.blocks.some((b) => b.idle))) return null;
-  const today = dayKey(now), at = (day, hm) => dayStart(day) + hm2min(hm) * 60e3;
+  const today = dayKey(now), at = tsAt;
   const entryOf = (day) => c.schedule.entries.find((e) => e.days.includes(weekday(dayStart(day) + 12 * 3600e3)));
   const ons = [];
   for (let k = -2; k <= 8; k++) { const day = addDays(today, k); for (const b of entryOf(day)?.blocks || []) ons.push(at(day, b.start)); }
@@ -498,26 +499,43 @@ function idleWatch(c, now) {
   }
   return null;
 }
+// Local date and time to a timestamp, also on the two days a year when the clock changes
+function tsAt(day, hm) {
+  const want = hm2min(hm), t = dayStart(day) + want * 60e3;
+  let diff = want - minOfDay(t); if (diff > 720) diff -= 1440; if (diff < -720) diff += 1440;
+  return t + diff * 60e3;
+}
+// Last schedule switch time in (from, now]: on at every block's start, off at its end (past midnight: next day; not for
+// "or later" blocks, idleWatch handles those). An off that falls inside another on-time is skipped (back-to-back stays on).
+function scheduleEvent(c, from, now) {
+  if (!c.schedule.on) return null;
+  const today = dayKey(now), ev = [];
+  for (let k = -2; k <= 0; k++) {
+    const day = addDays(today, k), g = c.schedule.entries.find((e) => e.days.includes(weekday(dayStart(day) + 12 * 3600e3)));
+    for (const b of g?.blocks || []) {
+      const on = tsAt(day, b.start), off = tsAt(hm2min(b.end) <= hm2min(b.start) ? addDays(day, 1) : day, b.end);
+      ev.push({ ts: on, on: true, until: off });
+      if (!b.idle) ev.push({ ts: off, on: false });
+    }
+  }
+  const covered = (t) => ev.some((e) => e.on && e.ts <= t && t < e.until);
+  const hits = ev.filter((e) => e.ts > from && e.ts <= now && (e.on || !covered(e.ts))).sort((a, b) => a.ts - b.ts || a.on - b.on);
+  return hits[hits.length - 1] || null;
+}
 async function runRules(d, prev, now) {
-  const c = d.cfg, r = R(d.mac), m = minOfDay(now), day = dayKey(now), crossed = crossedFn(prev, now);
-  if (!r.online) return;
+  const c = d.cfg, r = R(d.mac), m = minOfDay(now), day = dayKey(now), crossed = crossedFn(Math.max(prev, now - 5 * 60e3), now);
+  // schedule time while the plug was unreachable: remember it and switch once it answers again
+  const ev = switchable(d) ? scheduleEvent(c, Math.max(prev, now - 12 * 3600e3), now) : null;
+  if (!r.online) { if (ev) r.missed = ev; return; }
   if (kindOf(d) === 'motion') return motionRule(d, now);
   if (kindOf(d) === 'button') return;
   const sw = async (on, why) => { if (r.relay !== on) await setRelay(d.mac, on, why); };
   // Schedule
-  // schedule: every block switches on at its start and off at its end; a block past midnight ends on the next day.
-  // Off before on, so back-to-back blocks (…–08:00, 08:00–…) stay on.
-  if (c.schedule.on) {
-    const groupOn = (ts) => c.schedule.entries.find((e) => e.days.includes(weekday(ts)));
-    const overnight = (b) => hm2min(b.end) <= hm2min(b.start);
-    const today = groupOn(now)?.blocks || [], yesterday = groupOn(now - 864e5)?.blocks || [];
-    const offs = [...today.filter((b) => !b.idle && !overnight(b)), ...yesterday.filter((b) => !b.idle && overnight(b))];
-    // still inside another on-time (back-to-back or overlapping): stay on instead of a short off and on
-    const inside = (b, day) => { const st = hm2min(b.start), en = hm2min(b.end); return day === 'today' ? (overnight(b) ? m >= st : m >= st && m < en) : overnight(b) && m < en; };
-    const covered = today.some((b) => inside(b, 'today')) || yesterday.some((b) => inside(b, 'yesterday'));
-    if (!covered && offs.some((b) => crossed(hm2min(b.end)))) await sw(false, 'Zeitplan');
-    if (today.some((b) => crossed(hm2min(b.start)))) await sw(true, 'Zeitplan');
-  }
+  // a newer schedule time wins; a missed one is caught up if it is at most 12 h old. If switching fails, try again next round.
+  const due = ev || (r.missed && c.schedule.on && now - r.missed.ts < 12 * 3600e3 ? r.missed : null);
+  const late = !ev && due;
+  r.missed = null;
+  if (due) { try { await sw(due.on, late ? 'Zeitplan, nachgeholt' : 'Zeitplan'); } catch { r.missed = due; } }
   // "only off once no longer in use": from "off at", switch off once power stays below the threshold long enough
   const w = idleWatch(c, now);
   if (w && r.relay && r.w < w.below) {

@@ -78,6 +78,7 @@ export const EN = {
   'von Hand in der App': 'manually in the app',
   'am Gerät oder in einer anderen App': 'on the device or in another app',
   'Zeitplan': 'schedule',
+  'Zeitplan, nachgeholt': 'schedule, caught up',
   'nicht mehr benutzt': 'no longer in use',
   'Sonnenuntergang': 'sunset',
   'Sonnenaufgang': 'sunrise',

@@ -1051,7 +1051,7 @@ function morph(a, b) {
   for (let i = bc.length; i < ac.length; i++) if (!ac[i].dataset?.transient) ac[i].remove();
 }
 function render(fresh = false) {
-  if (!S || swipe || drag || hdrag || stpHold || document.activeElement?.classList.contains('stpin')) return;
+  if (!S || swipe || drag || hdrag || stpHold || document.activeElement?.classList.contains('stpin') || pickerField(document.activeElement)) return;
   document.documentElement.lang = lang();
   const [r0, r1, r2, r3] = route(), d = r0 === 'dev' ? dev(r1) : null;
   let html;
@@ -1412,7 +1412,12 @@ app.addEventListener('click', async (e) => {
   else if (at('[data-pushtest]')) { try { await api('api/push/test', { method: 'POST' }); toast(tr('Test gesendet')); } catch (x) { toast(x.message, true); } }
 });
 // Inputs: save as soon as a field is done
-app.addEventListener('change', async (e) => {
+// Time and date fields: iOS reports a change while the wheel is still turning; saving then (and blurring) closed the
+// picker. So they only count once the field loses focus; while one is open the page doesn't redraw either.
+const pickerField = (t) => t?.matches?.('input[type="time"], input[type="date"]');
+app.addEventListener('change', (e) => { if (pickerField(e.target) && document.activeElement === e.target) { e.target.dataset.pending = '1'; return; } onChange(e); });
+app.addEventListener('focusout', (e) => { const t = e.target; if (pickerField(t) && t.dataset.pending) { delete t.dataset.pending; onChange({ target: t }); } });
+async function onChange(e) {
   const t = e.target, [, r1] = route();
   if (t.dataset.in) {
     const v = t.type === 'number' ? Number(t.value) : t.value.trim();
@@ -1442,7 +1447,7 @@ app.addEventListener('change', async (e) => {
     try { const d = await api('api/devices', { method: 'POST', body: JSON.stringify({ ip: t.value.trim() }) }); await load(); toast(tr('{0} hinzugefügt', d.name)); } catch (x) { toast(x.message, true); }
     t.disabled = false;
   }
-});
+}
 app.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.matches('input')) e.target.blur();
   // Keyboard: Space toggles the plug, Enter opens it (like tapping)
